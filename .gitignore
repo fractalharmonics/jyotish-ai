@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and packaging
+build/
+dist/
+*.egg-info/
+
+# Local environment files
+.env
+.env.*
+
+# Temporary exploration output
+pyjhora_inventory*.json
+
+# Local chart data and generated chart output
+charts_in/*
+!charts_in/.gitkeep
+charts_out/*
+!charts_out/.gitkeep
