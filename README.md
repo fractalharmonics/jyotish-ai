@@ -12,8 +12,7 @@ an optional PyJHora enrichment layer.
 - `enrich.py` adds deterministic local enrichment. It currently adds PyJHora
   availability notes, planetary motion data for `primary_positions`, and
   top-level `data_notes`.
-- `inspect_pyjhora.py` and `explore_motion.py` are temporary exploration tools
-  for mapping PyJHora APIs.
+- `render_charts.py` renders generated chart JSON into SVG charts.
 
 ## Usage
 

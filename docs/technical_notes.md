@@ -37,8 +37,3 @@ Expected validated values for the local test chart:
 - `process_charts.py` orchestrates file processing.
 - `positions` remains raw.
 - `primary_positions` may contain enrichment.
-
-## Validation Scripts
-
-- `validate_divisional_charts.py` validates PyJHora divisional output.
-- `investigate_nodes.py` compares node calculation modes.
