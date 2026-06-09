@@ -8,6 +8,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.cache/
 
 # Virtual environments
 .venv/
@@ -29,4 +30,5 @@ charts_in/*
 charts_out/*
 !charts_out/.gitkeep
 charts_rendered/
+reports/
 *.svg

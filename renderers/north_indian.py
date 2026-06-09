@@ -55,7 +55,35 @@ def render_d1_north_indian(
     *,
     show_planet_degrees: bool = False,
 ) -> str:
-    stellium_chart = build_north_indian_chart(chart, chart_name)
+    return render_north_indian(
+        chart,
+        chart_name,
+        chart_key="d1",
+        show_planet_degrees=show_planet_degrees,
+    )
+
+
+def render_d9_north_indian(chart: dict, chart_name: str) -> str:
+    return render_north_indian(
+        chart,
+        chart_name,
+        chart_key="d9",
+        show_planet_degrees=False,
+    )
+
+
+def render_north_indian(
+    chart: dict,
+    chart_name: str,
+    *,
+    chart_key: str,
+    show_planet_degrees: bool = False,
+) -> str:
+    stellium_chart = build_north_indian_chart(
+        chart,
+        chart_name,
+        chart_key=chart_key,
+    )
     renderer = DegreeNorthIndianRenderer(
         size=640,
         theme="classic",

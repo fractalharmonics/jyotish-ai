@@ -52,10 +52,16 @@ class SourceBody:
     retrograde: bool
 
 
-def build_north_indian_chart(chart: dict, chart_name: str) -> CalculatedChart:
+def build_north_indian_chart(
+    chart: dict,
+    chart_name: str,
+    *,
+    chart_key: str = "d1",
+) -> CalculatedChart:
     return build_chart(
         chart,
         chart_name,
+        chart_key=chart_key,
         node_names="vedic",
         node_object_type=ObjectType.PLANET,
         include_aspects=False,
@@ -82,9 +88,11 @@ def build_chart(
     node_object_type: ObjectType,
     include_aspects: bool,
     suppress_node_retrograde: bool,
+    chart_key: str = "d1",
 ) -> CalculatedChart:
     positions = _positions(
         chart,
+        chart_key=chart_key,
         node_names=node_names,
         node_object_type=node_object_type,
         suppress_node_retrograde=suppress_node_retrograde,
@@ -94,7 +102,7 @@ def build_chart(
         datetime=_chart_datetime(chart),
         location=_chart_location(chart),
         positions=positions,
-        house_systems=_whole_sign_houses_from_lagna(chart),
+        house_systems=_whole_sign_houses_from_lagna(chart, chart_key=chart_key),
         aspects=_aspects(positions) if include_aspects else (),
         declination_aspects=(),
         metadata={"name": chart_name},
@@ -109,15 +117,15 @@ def aspect_summary(chart: CalculatedChart) -> dict[str, int]:
     return summary
 
 
-def source_bodies(chart: dict) -> list[SourceBody]:
-    d1 = _d1(chart)
+def source_bodies(chart: dict, *, chart_key: str = "d1") -> list[SourceBody]:
+    calculated_chart = _calculated_chart(chart, chart_key)
     primary_by_body = {
         position["body"]: position for position in chart.get("primary_positions", [])
     }
     bodies = []
 
     for body in PLANET_ORDER:
-        placement = d1.get(body)
+        placement = calculated_chart.get(body)
         if not placement:
             continue
 
@@ -130,7 +138,7 @@ def source_bodies(chart: dict) -> list[SourceBody]:
         bodies.append(
             SourceBody(
                 body=body,
-                longitude=float(placement["absolute_degree"]),
+                longitude=_placement_longitude(placement),
                 speed=float(speed),
                 retrograde=retrograde,
             )
@@ -142,13 +150,14 @@ def source_bodies(chart: dict) -> list[SourceBody]:
 def _positions(
     chart: dict,
     *,
+    chart_key: str,
     node_names: str,
     node_object_type: ObjectType,
     suppress_node_retrograde: bool,
 ) -> tuple[CelestialPosition, ...]:
     positions = []
 
-    for body in source_bodies(chart):
+    for body in source_bodies(chart, chart_key=chart_key):
         is_node = body.body in WESTERN_NODE_NAMES
         name = (
             WESTERN_NODE_NAMES[body.body]
@@ -167,15 +176,15 @@ def _positions(
             )
         )
 
-    lagna = _d1(chart).get("Lagna")
+    lagna = _calculated_chart(chart, chart_key).get("Lagna")
     if not lagna:
-        raise ValueError("calculated_charts.d1 missing Lagna")
+        raise ValueError(f"calculated_charts.{chart_key} missing Lagna")
 
     positions.append(
         CelestialPosition(
             name="ASC",
             object_type=ObjectType.ANGLE,
-            longitude=float(lagna["absolute_degree"]),
+            longitude=_placement_longitude(lagna),
         )
     )
 
@@ -215,10 +224,14 @@ def _separation(longitude1: float, longitude2: float) -> float:
     return min(difference, 360.0 - difference)
 
 
-def _whole_sign_houses_from_lagna(chart: dict) -> dict[str, HouseCusps]:
-    lagna = _d1(chart).get("Lagna")
+def _whole_sign_houses_from_lagna(
+    chart: dict,
+    *,
+    chart_key: str = "d1",
+) -> dict[str, HouseCusps]:
+    lagna = _calculated_chart(chart, chart_key).get("Lagna")
     if not lagna:
-        raise ValueError("calculated_charts.d1 missing Lagna")
+        raise ValueError(f"calculated_charts.{chart_key} missing Lagna")
 
     asc_sign_index = int(lagna["sign_index"])
     cusps = tuple(((asc_sign_index + i) % 12) * 30.0 for i in range(12))
@@ -280,9 +293,16 @@ def _chart_location(chart: dict) -> ChartLocation:
 
 
 def _d1(chart: dict) -> dict:
-    d1 = chart.get("calculated_charts", {}).get("d1")
-    if d1:
-        return d1
+    return _calculated_chart(chart, "d1")
+
+
+def _calculated_chart(chart: dict, chart_key: str) -> dict:
+    calculated_chart = chart.get("calculated_charts", {}).get(chart_key)
+    if calculated_chart:
+        return calculated_chart
+
+    if chart_key != "d1":
+        raise ValueError(f"chart missing calculated_charts.{chart_key}")
 
     positions = {}
     for position in chart.get("primary_positions", []):
@@ -299,6 +319,17 @@ def _d1(chart: dict) -> dict:
     if not positions:
         raise ValueError("chart has neither calculated_charts.d1 nor primary_positions")
     return positions
+
+
+def _placement_longitude(placement: dict) -> float:
+    absolute_degree = placement.get("absolute_degree")
+    if absolute_degree is not None:
+        return float(absolute_degree)
+
+    sign_index = placement.get("sign_index")
+    if sign_index is None:
+        sign_index = _sign_index(placement.get("sign"))
+    return int(sign_index) * 30.0 + 15.0
 
 
 def _sign_index(sign: str | None) -> int:

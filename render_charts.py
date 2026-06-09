@@ -2,7 +2,7 @@ import json
 import traceback
 from pathlib import Path
 
-from renderers.north_indian import render_d1_north_indian
+from renderers.north_indian import render_d1_north_indian, render_d9_north_indian
 from renderers.western import render_d1_western
 
 
@@ -30,18 +30,14 @@ def render_chart_file(chart_path):
         print(f"ERROR rendering {chart_path} North Indian D1: {error}")
         traceback.print_exc()
 
-    north_degrees_path = chart_output_dir / "d1_north_indian_degrees.svg"
+    d9_north_path = chart_output_dir / "d9_north_indian.svg"
     try:
-        north_degrees_svg = render_d1_north_indian(
-            chart,
-            chart_name,
-            show_planet_degrees=True,
-        )
-        north_degrees_path.write_text(north_degrees_svg, encoding="utf-8")
-        outputs.append(north_degrees_path)
-        print(f"Rendered {north_degrees_path}")
+        d9_north_svg = render_d9_north_indian(chart, chart_name)
+        d9_north_path.write_text(d9_north_svg, encoding="utf-8")
+        outputs.append(d9_north_path)
+        print(f"Rendered {d9_north_path}")
     except Exception as error:
-        print(f"ERROR rendering {chart_path} North Indian D1 degrees: {error}")
+        print(f"ERROR rendering {chart_path} North Indian D9: {error}")
         traceback.print_exc()
 
     western_path = chart_output_dir / "d1_western.svg"

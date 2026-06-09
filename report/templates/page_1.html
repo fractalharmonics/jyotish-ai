@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ report_title }}</title>
+  <style>{{ styles }}</style>
+</head>
+<body>
+  <main class="page">
+    <section class="header">
+      <div>
+        <h1>{{ name }}</h1>
+        <p class="subtitle">Jyotish Chart Report</p>
+      </div>
+      <dl class="birth-details">
+        <div><dt>Birth Date</dt><dd>{{ birth_date }}</dd></div>
+        <div><dt>Birth Time</dt><dd>{{ birth_time }}</dd></div>
+        <div><dt>Place</dt><dd>{{ place }}</dd></div>
+        <div><dt>Ayanamsa</dt><dd>{{ ayanamsa }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="charts">
+      <figure>
+        <figcaption>D1 Rasi</figcaption>
+        <div class="chart-svg">{{ d1_north_svg }}</div>
+      </figure>
+      <figure>
+        <figcaption>D9 Navamsa</figcaption>
+        <div class="chart-svg">{{ d9_north_svg }}</div>
+      </figure>
+    </section>
+
+    <section>
+      <h2>Graha Summary</h2>
+      <table class="graha-table">
+        <thead>
+          <tr>
+            <th>Graha</th>
+            <th>Longitude</th>
+            <th>Dignity</th>
+            <th>D9</th>
+            <th>Nakshatra</th>
+            <th>Chara Karaka</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ graha_rows }}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Graha Drishti</h2>
+      <table class="aspect-table">
+        <thead>
+          <tr>
+            <th>Graha</th>
+            <th>Aspects</th>
+            <th>Special Aspect Type</th>
+            <th>Targets</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ aspect_rows }}
+        </tbody>
+      </table>
+    </section>
+  </main>
+</body>
+</html>
