@@ -1,0 +1,74 @@
+import json
+import traceback
+from pathlib import Path
+
+from renderers.north_indian import render_d1_north_indian
+from renderers.western import render_d1_western
+
+
+INPUT_DIR = Path("charts_out")
+OUTPUT_DIR = Path("charts_rendered")
+
+
+def render_chart_file(chart_path):
+    with chart_path.open("r", encoding="utf-8") as input_file:
+        chart = json.load(input_file)
+
+    chart_name = chart_path.stem
+    chart_output_dir = OUTPUT_DIR / chart_name
+    chart_output_dir.mkdir(parents=True, exist_ok=True)
+
+    outputs = []
+
+    north_path = chart_output_dir / "d1_north_indian.svg"
+    try:
+        north_svg = render_d1_north_indian(chart, chart_name)
+        north_path.write_text(north_svg, encoding="utf-8")
+        outputs.append(north_path)
+        print(f"Rendered {north_path}")
+    except Exception as error:
+        print(f"ERROR rendering {chart_path} North Indian D1: {error}")
+        traceback.print_exc()
+
+    north_degrees_path = chart_output_dir / "d1_north_indian_degrees.svg"
+    try:
+        north_degrees_svg = render_d1_north_indian(
+            chart,
+            chart_name,
+            show_planet_degrees=True,
+        )
+        north_degrees_path.write_text(north_degrees_svg, encoding="utf-8")
+        outputs.append(north_degrees_path)
+        print(f"Rendered {north_degrees_path}")
+    except Exception as error:
+        print(f"ERROR rendering {chart_path} North Indian D1 degrees: {error}")
+        traceback.print_exc()
+
+    western_path = chart_output_dir / "d1_western.svg"
+    try:
+        render_d1_western(chart, chart_name, western_path)
+        outputs.append(western_path)
+        print(f"Rendered {western_path}")
+    except Exception as error:
+        print(f"ERROR rendering {chart_path} Western D1: {error}")
+        traceback.print_exc()
+
+    return outputs
+
+
+def main():
+    chart_paths = sorted(INPUT_DIR.glob("*.json"))
+    if not chart_paths:
+        print(f"No chart JSON files found in {INPUT_DIR}")
+        return
+
+    for chart_path in chart_paths:
+        try:
+            render_chart_file(chart_path)
+        except Exception as error:
+            print(f"ERROR processing {chart_path}: {error}")
+            traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()

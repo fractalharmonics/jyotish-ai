@@ -34,3 +34,5 @@ charts_in/*
 !charts_in/.gitkeep
 charts_out/*
 !charts_out/.gitkeep
+charts_rendered/
+*.svg
