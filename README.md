@@ -28,6 +28,12 @@ To regenerate outputs even when JSON already exists:
 python3 process_charts.py --force
 ```
 
+To build the full local chart package in one command:
+
+```bash
+python3 build_chart_package.py
+```
+
 Input and output chart files are ignored by Git. The `charts_in/` and
 `charts_out/` directories are kept in the repository with `.gitkeep` files.
 

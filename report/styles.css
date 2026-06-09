@@ -11,8 +11,8 @@ body {
   margin: 0;
   color: #111;
   font-family: "Helvetica Neue", Arial, sans-serif;
-  font-size: 8.5px;
-  line-height: 1.22;
+  font-size: 7.8px;
+  line-height: 1.18;
 }
 
 .page {
@@ -88,19 +88,19 @@ h2 {
 }
 
 .chart-svg {
-  height: 238px;
+  height: 218px;
   overflow: hidden;
   text-align: center;
 }
 
 .chart-svg svg {
-  height: 238px;
+  height: 218px;
   max-width: 100%;
   width: auto;
 }
 
 section {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 table {
@@ -119,46 +119,14 @@ td {
 
 th {
   background: #eee;
-  font-size: 7.5px;
+  font-size: 6.8px;
   letter-spacing: 0.02em;
   text-align: left;
   text-transform: uppercase;
 }
 
 td {
-  font-size: 8px;
-}
-
-.graha-table th:nth-child(1),
-.graha-table td:nth-child(1),
-.aspect-table th:nth-child(1),
-.aspect-table td:nth-child(1) {
-  width: 10%;
-}
-
-.graha-table th:nth-child(2),
-.graha-table td:nth-child(2) {
-  width: 18%;
-}
-
-.graha-table th:nth-child(3),
-.graha-table td:nth-child(3) {
-  width: 15%;
-}
-
-.graha-table th:nth-child(4),
-.graha-table td:nth-child(4) {
-  width: 10%;
-}
-
-.graha-table th:nth-child(5),
-.graha-table td:nth-child(5) {
-  width: 17%;
-}
-
-.graha-table th:nth-child(6),
-.graha-table td:nth-child(6) {
-  width: 14%;
+  font-size: 7.2px;
 }
 
 .aspect-table th:nth-child(2),
@@ -173,4 +141,10 @@ td {
 
 .muted {
   color: #666;
+}
+
+.rule-note {
+  color: #444;
+  font-size: 7px;
+  margin: -1px 0 3px;
 }

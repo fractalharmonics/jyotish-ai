@@ -25,15 +25,38 @@ behavior is corrected upstream or explicitly handled in local code.
 To reproduce the validated JHora Rahu/Ketu values, use direct Swiss Ephemeris
 `MEAN_NODE` with sidereal `SIDM_USER` ayanamsa from JHora metadata.
 
-Expected validated values for the local test chart:
-
-- Rahu: approximately `75.099789`
-- Ketu: approximately `255.099789`
+Do not document local chart-specific node longitudes in committed files.
 
 ## Current Architecture
 
 - `parser_jhora.py` parses raw source data.
 - `enrich.py` adds derived/enriched data.
 - `process_charts.py` orchestrates file processing.
+- `render_charts.py` renders SVG charts from generated JSON.
+- `report/build_report.py` builds the first-page PDF report from generated JSON
+  and SVG charts.
 - `positions` remains raw.
 - `primary_positions` may contain enrichment.
+
+## Divisional Degree Policy
+
+Projected D9/D10/D20 degrees are suppressed because the source JHora TXT export
+does not provide full divisional longitudes and the projected-degree method has
+not been verified against JHora display conventions. Do not re-enable
+divisional degrees or introduce correction factors until the methodology is
+validated.
+
+## Report Aspect Rules
+
+Graha drishti uses sign-based Vedic planetary aspects:
+
+- All grahas aspect the 7th sign from their placement.
+- Mars additionally aspects the 4th and 8th signs.
+- Jupiter additionally aspects the 5th and 9th signs.
+- Saturn additionally aspects the 3rd and 10th signs.
+
+Rashi drishti is kept separate from graha drishti:
+
+- Movable signs aspect fixed signs except the adjacent fixed sign.
+- Fixed signs aspect movable signs except the adjacent movable sign.
+- Dual signs aspect all other dual signs.

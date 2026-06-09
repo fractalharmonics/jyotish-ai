@@ -1,11 +1,11 @@
+from __future__ import annotations
+
+import argparse
 import json
 from pathlib import Path
 
 
-CHART_PATHS = (
-    Path("charts_out/Yashta/Yashta.json"),
-    Path("charts_out/Yashta.json"),
-)
+INPUT_DIR = Path("charts_out")
 
 EXPECTED_TOP_LEVEL_KEYS = {
     "metadata",
@@ -49,14 +49,29 @@ EXPECTED_CALCULATED_CHARTS = {
     "d20",
 }
 
-def chart_path():
-    for path in CHART_PATHS:
-        if path.exists():
-            return path
-    raise AssertionError(
-        "No generated chart JSON found at "
-        f"{' or '.join(str(path) for path in CHART_PATHS)}"
+NON_D1_CHARTS = EXPECTED_CALCULATED_CHARTS - {"d1"}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Validate generated chart JSON structure and integrity."
     )
+    parser.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        help="Chart JSON path(s). Defaults to charts_out/*.json.",
+    )
+    return parser.parse_args()
+
+
+def chart_paths(paths: list[Path]) -> list[Path]:
+    if paths:
+        return paths
+    discovered = sorted(INPUT_DIR.glob("*.json"))
+    if not discovered:
+        raise AssertionError(f"No generated chart JSON files found in {INPUT_DIR}")
+    return discovered
 
 
 def assert_contains_keys(container, expected_keys, label):
@@ -64,31 +79,22 @@ def assert_contains_keys(container, expected_keys, label):
     assert not missing, f"{label} missing keys: {sorted(missing)}"
 
 
-def main():
-    with chart_path().open("r", encoding="utf-8") as input_file:
-        chart = json.load(input_file)
-
-    assert_contains_keys(chart, EXPECTED_TOP_LEVEL_KEYS, "top-level JSON")
+def validate_chart(chart: dict, chart_label: str) -> None:
+    assert_contains_keys(chart, EXPECTED_TOP_LEVEL_KEYS, f"{chart_label} top-level JSON")
 
     metadata = chart["metadata"]
-    assert_contains_keys(metadata, EXPECTED_METADATA_KEYS, "metadata")
+    assert_contains_keys(metadata, EXPECTED_METADATA_KEYS, f"{chart_label} metadata")
     assert_contains_keys(
         metadata["coordinates"],
         EXPECTED_COORDINATE_KEYS,
-        "metadata.coordinates",
+        f"{chart_label} metadata.coordinates",
     )
 
     primary_positions = chart["primary_positions"]
-    primary_by_body = {
-        position["body"]: position
-        for position in primary_positions
-    }
+    primary_by_body = {position["body"]: position for position in primary_positions}
 
-    assert len(primary_positions) == 10, (
-        f"primary_positions expected 10 entries, got {len(primary_positions)}"
-    )
     assert list(primary_by_body) == EXPECTED_PRIMARY_BODIES, (
-        "primary_positions bodies mismatch: "
+        f"{chart_label} primary_positions bodies mismatch: "
         f"expected {EXPECTED_PRIMARY_BODIES}, got {list(primary_by_body)}"
     )
 
@@ -96,73 +102,91 @@ def main():
     assert_contains_keys(
         calculated_charts,
         EXPECTED_CALCULATED_CHARTS,
-        "calculated_charts",
+        f"{chart_label} calculated_charts",
     )
 
-    d1 = calculated_charts["d1"]
+    validate_d1(chart_label, primary_by_body, calculated_charts["d1"])
+    validate_divisional_suppression(chart_label, calculated_charts)
+    validate_node_corrections(chart_label, calculated_charts["d1"])
+    validate_motion_fields(chart_label, primary_by_body)
+
+
+def validate_d1(chart_label: str, primary_by_body: dict, d1: dict) -> None:
     for body in EXPECTED_PRIMARY_BODIES:
-        assert body in d1, f"calculated_charts.d1 missing body: {body}"
-        for chart_name in EXPECTED_CALCULATED_CHARTS:
-            entry = calculated_charts[chart_name][body]
-            assert "degree_in_sign" in entry, (
-                f"calculated_charts.{chart_name}.{body} missing degree_in_sign"
-            )
-            assert "absolute_degree" in entry, (
-                f"calculated_charts.{chart_name}.{body} missing absolute_degree"
-            )
-        assert d1[body]["sign"] == primary_by_body[body]["sign"], (
-            f"calculated_charts.d1 sign mismatch for {body}: "
-            f"calculated={d1[body]['sign']} "
-            f"primary={primary_by_body[body]['sign']}"
+        assert body in d1, f"{chart_label} calculated_charts.d1 missing body: {body}"
+        d1_entry = d1[body]
+        primary_entry = primary_by_body[body]
+
+        assert d1_entry["sign"] == primary_entry["sign"], (
+            f"{chart_label} calculated_charts.d1 sign mismatch for {body}: "
+            f"calculated={d1_entry['sign']} primary={primary_entry['sign']}"
+        )
+        assert d1_entry["degree_in_sign"] is not None, (
+            f"{chart_label} calculated_charts.d1.{body} degree_in_sign expected"
+        )
+        assert d1_entry["absolute_degree"] is not None, (
+            f"{chart_label} calculated_charts.d1.{body} absolute_degree expected"
+        )
+        assert d1_entry.get("degree_source") == "source_longitude", (
+            f"{chart_label} calculated_charts.d1.{body} degree_source expected "
+            f"source_longitude, got {d1_entry.get('degree_source')}"
         )
 
-    d1_sun = d1["Sun"]
-    assert d1_sun["degree_in_sign"] is not None, (
-        "calculated_charts.d1.Sun degree_in_sign expected to exist"
-    )
-    assert d1_sun["absolute_degree"] is not None, (
-        "calculated_charts.d1.Sun absolute_degree expected to exist"
-    )
-    assert d1_sun["degree_source"] == "source_longitude", (
-        "calculated_charts.d1.Sun degree_source expected source_longitude, "
-        f"got {d1_sun.get('degree_source')}"
-    )
 
-    d9 = calculated_charts["d9"]
-    d9_sun = d9["Sun"]
-    assert d9_sun["sign"] == "Ta", (
-        f"calculated_charts.d9.Sun sign expected Ta, got {d9_sun['sign']}"
-    )
-    assert d9_sun["degree_in_sign"] is None, (
-        "calculated_charts.d9.Sun degree_in_sign expected null"
-    )
-    assert d9_sun["absolute_degree"] is None, (
-        "calculated_charts.d9.Sun absolute_degree expected null"
-    )
-    assert d9_sun["degree_status"] == "not_jhora_verified", (
-        "calculated_charts.d9.Sun degree_status expected not_jhora_verified, "
-        f"got {d9_sun.get('degree_status')}"
-    )
-    assert d9_sun["degree_source"] == "suppressed_projected_degree", (
-        "calculated_charts.d9.Sun degree_source expected "
-        "suppressed_projected_degree, "
-        f"got {d9_sun.get('degree_source')}"
-    )
+def validate_divisional_suppression(chart_label: str, calculated_charts: dict) -> None:
+    for chart_name in NON_D1_CHARTS:
+        divisional = calculated_charts[chart_name]
+        for body in EXPECTED_PRIMARY_BODIES:
+            assert body in divisional, (
+                f"{chart_label} calculated_charts.{chart_name} missing body: {body}"
+            )
+            entry = divisional[body]
+            assert "sign" in entry, (
+                f"{chart_label} calculated_charts.{chart_name}.{body} missing sign"
+            )
+            assert entry["degree_in_sign"] is None, (
+                f"{chart_label} calculated_charts.{chart_name}.{body} "
+                "degree_in_sign expected null"
+            )
+            assert entry["absolute_degree"] is None, (
+                f"{chart_label} calculated_charts.{chart_name}.{body} "
+                "absolute_degree expected null"
+            )
+            assert entry.get("degree_status") == "not_jhora_verified", (
+                f"{chart_label} calculated_charts.{chart_name}.{body} "
+                "degree_status expected not_jhora_verified"
+            )
+            assert entry.get("degree_source") == "suppressed_projected_degree", (
+                f"{chart_label} calculated_charts.{chart_name}.{body} "
+                "degree_source expected suppressed_projected_degree"
+            )
 
+
+def validate_node_corrections(chart_label: str, d1: dict) -> None:
     for node in ("Rahu", "Ketu"):
         assert d1[node].get("node_source") == "swisseph_mean_node_corrected", (
-            f"{node} node_source expected swisseph_mean_node_corrected, "
-            f"got {d1[node].get('node_source')}"
+            f"{chart_label} {node} node_source expected "
+            f"swisseph_mean_node_corrected, got {d1[node].get('node_source')}"
         )
 
-    mercury = primary_by_body["Mercury"]
-    assert mercury["retrograde"] is True, "Mercury retrograde expected true"
-    assert mercury["motion_status"] == "retrograde", (
-        "Mercury motion_status expected retrograde, "
-        f"got {mercury['motion_status']}"
-    )
 
-    print("Validation passed")
+def validate_motion_fields(chart_label: str, primary_by_body: dict) -> None:
+    for body, entry in primary_by_body.items():
+        assert "retrograde" in entry, f"{chart_label} {body} missing retrograde"
+        assert "motion_status" in entry, f"{chart_label} {body} missing motion_status"
+        assert "direct" in entry, f"{chart_label} {body} missing direct"
+        assert "stationary" in entry, f"{chart_label} {body} missing stationary"
+        if body == "Lagna":
+            assert entry["motion_status"] == "not_applicable", (
+                f"{chart_label} Lagna motion_status expected not_applicable"
+            )
+
+
+def main() -> None:
+    for path in chart_paths(parse_args().paths):
+        with path.open("r", encoding="utf-8") as input_file:
+            validate_chart(json.load(input_file), path.stem)
+        print(f"Validation passed: {path}")
 
 
 if __name__ == "__main__":

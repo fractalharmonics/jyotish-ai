@@ -45,61 +45,14 @@ SIGN_NAMES = {
     "Aq": "Aquarius",
     "Pi": "Pisces",
 }
-SIGN_LORDS = {
-    "Ar": "Mars",
-    "Ta": "Venus",
-    "Ge": "Mercury",
-    "Cn": "Moon",
-    "Le": "Sun",
-    "Vi": "Mercury",
-    "Li": "Venus",
-    "Sc": "Mars",
-    "Sg": "Jupiter",
-    "Cp": "Saturn",
-    "Aq": "Saturn",
-    "Pi": "Jupiter",
-}
-EXALTATION = {
-    "Sun": "Ar",
-    "Moon": "Ta",
-    "Mars": "Cp",
-    "Mercury": "Vi",
-    "Jupiter": "Cn",
-    "Venus": "Pi",
-    "Saturn": "Li",
-}
-DEBILITATION = {
-    "Sun": "Li",
-    "Moon": "Sc",
-    "Mars": "Cn",
-    "Mercury": "Pi",
-    "Jupiter": "Cp",
-    "Venus": "Vi",
-    "Saturn": "Ar",
-}
-FRIENDS = {
-    "Sun": {"Moon", "Mars", "Jupiter"},
-    "Moon": {"Sun", "Mercury"},
-    "Mars": {"Sun", "Moon", "Jupiter"},
-    "Mercury": {"Sun", "Venus"},
-    "Jupiter": {"Sun", "Moon", "Mars"},
-    "Venus": {"Mercury", "Saturn"},
-    "Saturn": {"Mercury", "Venus"},
-}
-ENEMIES = {
-    "Sun": {"Venus", "Saturn"},
-    "Moon": set(),
-    "Mars": {"Mercury"},
-    "Mercury": {"Moon"},
-    "Jupiter": {"Mercury", "Venus"},
-    "Venus": {"Sun", "Moon"},
-    "Saturn": {"Sun", "Moon", "Mars"},
-}
 SPECIAL_ASPECTS = {
     "Mars": ((4, "4th"), (8, "8th")),
     "Jupiter": ((5, "5th"), (9, "9th")),
     "Saturn": ((3, "3rd"), (10, "10th")),
 }
+MOVABLE_SIGNS = {"Ar", "Cn", "Li", "Cp"}
+FIXED_SIGNS = {"Ta", "Le", "Sc", "Aq"}
+DUAL_SIGNS = {"Ge", "Vi", "Sg", "Pi"}
 
 
 def main() -> None:
@@ -113,7 +66,7 @@ def main() -> None:
         print(f"Wrote {output_path} ({page_count} page)")
 
 
-def build_report(chart_path: Path) -> Path:
+def build_report(chart_path: Path) -> tuple[Path, int]:
     chart_name = chart_path.stem
     chart = json.loads(chart_path.read_text())
     rendered_dir = CHARTS_RENDERED / chart_name
@@ -133,6 +86,7 @@ def build_report(chart_path: Path) -> Path:
             "d9_north_svg": d9_svg,
             "graha_rows": graha_rows(chart),
             "aspect_rows": aspect_rows(chart),
+            "rashi_rows": rashi_rows(chart),
         }
     )
 
@@ -162,10 +116,40 @@ def graha_rows(chart: dict) -> str:
             "<tr>"
             f"<td>{escape(ABBREVIATIONS[graha])}</td>"
             f"<td>{escape(longitude_text(position))}</td>"
-            f"<td>{escape(dignity(graha, position.get('sign')))}</td>"
-            f"<td>{escape(sign_display(d9.get(graha, {}).get('sign')))}</td>"
+            f"<td>{escape(sign_display(position.get('sign')))}</td>"
             f"<td>{escape(position.get('nakshatra') or '')}</td>"
+            f"<td>{escape(position.get('pada') or '')}</td>"
             f"<td>{escape(position.get('chara_karaka') or '')}</td>"
+            f"<td>{escape(sign_display(d9.get(graha, {}).get('sign')))}</td>"
+            f"<td>{escape(position.get('motion_status') or '')}</td>"
+            f"<td>{escape(speed_text(position.get('speed')))}</td>"
+            "</tr>"
+        )
+    return "\n".join(rows)
+
+
+def rashi_rows(chart: dict) -> str:
+    primary = primary_positions(chart)
+    sign_to_grahas: dict[str, list[str]] = {sign: [] for sign in SIGNS}
+    for graha in GRAHAS:
+        position = primary.get(graha)
+        if position and position.get("sign") in sign_to_grahas:
+            sign_to_grahas[position["sign"]].append(graha)
+
+    occupied_signs = [sign for sign in SIGNS if sign_to_grahas[sign]]
+    rows = []
+    for sign in occupied_signs:
+        aspected_signs = rashi_drishti_signs(sign)
+        targets = []
+        for aspected_sign in aspected_signs:
+            for graha in sign_to_grahas[aspected_sign]:
+                targets.append(f"{ABBREVIATIONS[graha]} ({sign_display(aspected_sign)})")
+
+        rows.append(
+            "<tr>"
+            f"<td>{escape(sign_display(sign))}</td>"
+            f"<td>{escape(', '.join(sign_display(item) for item in aspected_signs))}</td>"
+            f"<td>{escape(', '.join(targets) or 'None')}</td>"
             "</tr>"
         )
     return "\n".join(rows)
@@ -230,30 +214,40 @@ def longitude_text(position: dict) -> str:
     return f"{sign} {degree}°{minute:02d}'{second:05.2f}\""
 
 
-def dignity(graha: str, sign: str | None) -> str:
-    if graha in {"Rahu", "Ketu"} or sign not in SIGNS:
-        return "Node"
-    if EXALTATION.get(graha) == sign:
-        return "Exalted"
-    if DEBILITATION.get(graha) == sign:
-        return "Debilitated"
-    lord = SIGN_LORDS[sign]
-    if lord == graha:
-        return "Own sign"
-    if lord in FRIENDS.get(graha, set()):
-        return "Friend sign"
-    if lord in ENEMIES.get(graha, set()):
-        return "Enemy sign"
-    return "Neutral"
-
-
 def sign_from(source_sign: str, house_count: int) -> str:
     source_index = SIGNS.index(source_sign)
     return SIGNS[(source_index + house_count - 1) % 12]
 
 
+def rashi_drishti_signs(sign: str) -> list[str]:
+    if sign in MOVABLE_SIGNS:
+        return [
+            item
+            for item in SIGNS
+            if item in FIXED_SIGNS and item != sign_from(sign, 2)
+        ]
+    if sign in FIXED_SIGNS:
+        return [
+            item
+            for item in SIGNS
+            if item in MOVABLE_SIGNS and item != sign_from(sign, 12)
+        ]
+    if sign in DUAL_SIGNS:
+        return [item for item in SIGNS if item in DUAL_SIGNS and item != sign]
+    return []
+
+
 def sign_display(sign: str | None) -> str:
     return SIGN_NAMES.get(sign or "", sign or "")
+
+
+def speed_text(speed: object) -> str:
+    if speed is None:
+        return ""
+    try:
+        return f"{float(speed):.4f}"
+    except (TypeError, ValueError):
+        return str(speed)
 
 
 def escape(value: object) -> str:
