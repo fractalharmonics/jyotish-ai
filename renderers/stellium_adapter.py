@@ -221,8 +221,7 @@ def _whole_sign_houses_from_lagna(chart: dict) -> dict[str, HouseCusps]:
         raise ValueError("calculated_charts.d1 missing Lagna")
 
     asc_sign_index = int(lagna["sign_index"])
-    asc_degree = float(lagna.get("degree_in_sign") or 0.0)
-    cusps = tuple(((asc_sign_index + i) % 12) * 30.0 + asc_degree for i in range(12))
+    cusps = tuple(((asc_sign_index + i) % 12) * 30.0 for i in range(12))
     return {"Whole Sign": HouseCusps(system="Whole Sign", cusps=cusps)}
 
 
