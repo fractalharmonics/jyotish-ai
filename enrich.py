@@ -4,6 +4,8 @@ from datetime import datetime
 import io
 import re
 
+import swisseph as swe
+
 
 PYJHORA_SPEC = importlib.util.find_spec("jhora")
 PYJHORA_MODULE = None
@@ -26,6 +28,29 @@ PLANET_IDS = {
     "Rahu": 7,
     "Ketu": 8,
 }
+
+SIGNS = ("Ar", "Ta", "Ge", "Cn", "Le", "Vi", "Li", "Sc", "Sg", "Cp", "Aq", "Pi")
+INDEX_TO_SIGN = {index: sign for index, sign in enumerate(SIGNS)}
+BODY_TO_PYJHORA_ID = {
+    "Lagna": "L",
+    "Sun": 0,
+    "Moon": 1,
+    "Mars": 2,
+    "Mercury": 3,
+    "Jupiter": 4,
+    "Venus": 5,
+    "Saturn": 6,
+    "Rahu": 7,
+    "Ketu": 8,
+}
+PYJHORA_ID_TO_BODY = {value: key for key, value in BODY_TO_PYJHORA_ID.items()}
+DIVISIONAL_FACTORS = {
+    "d1": 1,
+    "d9": 9,
+    "d10": 10,
+    "d20": 20,
+}
+
 
 def parse_birth_date(date_text):
     return datetime.strptime(date_text, "%B %d, %Y")
@@ -55,6 +80,11 @@ def parse_timezone(time_zone_text):
     return offset
 
 
+def parse_ayanamsa_degrees(ayanamsa_text):
+    degrees, minutes, seconds = ayanamsa_text.split("-")
+    return int(degrees) + int(minutes) / 60 + float(seconds) / 3600
+
+
 def build_jd_and_place(metadata, notes):
     with contextlib.redirect_stdout(io.StringIO()):
         from jhora import utils
@@ -71,21 +101,32 @@ def build_jd_and_place(metadata, notes):
 
     place_name = metadata["place"]
     place_data = None
+    coordinates = metadata.get("coordinates")
 
-    try:
-        with contextlib.redirect_stdout(io.StringIO()):
-            resolved_place = utils.get_place(place_name)
-    except Exception as error:
-        notes.append(f"PyJHora place lookup failed: {error}")
-    else:
-        if resolved_place:
-            place_data = {
-                "name": resolved_place[0],
-                "latitude": resolved_place[1],
-                "longitude": resolved_place[2],
-                "timezone": resolved_place[3],
-                "elevation": resolved_place[4] if len(resolved_place) > 4 else None,
-            }
+    if coordinates:
+        place_data = {
+            "name": place_name,
+            "latitude": coordinates["latitude_decimal"],
+            "longitude": coordinates["longitude_decimal"],
+            "timezone": timezone,
+            "elevation": None,
+        }
+
+    if place_data is None:
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                resolved_place = utils.get_place(place_name)
+        except Exception as error:
+            notes.append(f"PyJHora place lookup failed: {error}")
+        else:
+            if resolved_place:
+                place_data = {
+                    "name": resolved_place[0],
+                    "latitude": resolved_place[1],
+                    "longitude": resolved_place[2],
+                    "timezone": resolved_place[3],
+                    "elevation": resolved_place[4] if len(resolved_place) > 4 else None,
+                }
 
     if place_data is None:
         raise ValueError(f"Could not resolve coordinates for place: {place_name}")
@@ -173,6 +214,115 @@ def apply_motion_enrichment(chart, notes):
     notes.append("PyJHora motion enrichment completed successfully")
 
 
+def chart_entry(body, sign_index, degree_in_sign, source, node_source=None):
+    sign_index = int(sign_index)
+    degree_in_sign = round(float(degree_in_sign), 6)
+    entry = {
+        "body": body,
+        "sign": INDEX_TO_SIGN[sign_index],
+        "sign_index": sign_index,
+        "degree_in_sign": degree_in_sign,
+        "absolute_degree": round(sign_index * 30 + degree_in_sign, 6),
+        "source": source,
+    }
+    if node_source:
+        entry["node_source"] = node_source
+    return entry
+
+
+def corrected_mean_node_longitudes(jd, place, ayanamsa_value):
+    jd_utc = jd - place.timezone / 24.0
+    swe.set_sid_mode(swe.SIDM_USER, jd, ayanamsa_value)
+    flags = swe.FLG_SWIEPH | swe.FLG_SPEED | swe.FLG_SIDEREAL
+    rahu_data, _ = swe.calc_ut(jd_utc, swe.MEAN_NODE, flags)
+    rahu = rahu_data[0] % 360
+    return {
+        "Rahu": rahu,
+        "Ketu": (rahu + 180) % 360,
+    }
+
+
+def add_corrected_nodes(calculated_chart, factor, node_longitudes, drik):
+    for body in ("Rahu", "Ketu"):
+        sign_index, degree_in_sign = drik.dasavarga_from_long(
+            node_longitudes[body],
+            divisional_chart_factor=factor,
+        )
+        calculated_chart[body] = chart_entry(
+            body,
+            sign_index,
+            degree_in_sign,
+            "pyjhora_calculated",
+            node_source="swisseph_mean_node_corrected",
+        )
+
+
+def add_calculated_lagna(calculated_chart, jd, place, factor, drik):
+    sign_index, degree_in_sign = drik.ascendant(jd, place)[:2]
+    absolute_degree = sign_index * 30 + degree_in_sign
+    lagna_sign_index, lagna_degree = drik.dasavarga_from_long(
+        absolute_degree,
+        divisional_chart_factor=factor,
+    )
+    calculated_chart["Lagna"] = chart_entry(
+        "Lagna",
+        lagna_sign_index,
+        lagna_degree,
+        "pyjhora_calculated",
+    )
+
+
+def calculated_chart_from_positions(raw_positions):
+    calculated_chart = {}
+    for planet_id, position in raw_positions:
+        body = PYJHORA_ID_TO_BODY.get(planet_id)
+        if body is None or body in {"Rahu", "Ketu"}:
+            continue
+
+        sign_index, degree_in_sign = position
+        calculated_chart[body] = chart_entry(
+            body,
+            sign_index,
+            degree_in_sign,
+            "pyjhora_calculated",
+        )
+
+    return calculated_chart
+
+
+def apply_calculated_charts(chart, notes):
+    with contextlib.redirect_stdout(io.StringIO()):
+        from jhora.panchanga import drik
+
+    jd, place = build_jd_and_place(chart["metadata"], notes)
+    ayanamsa_value = parse_ayanamsa_degrees(chart["metadata"]["ayanamsa"])
+    drik.set_ayanamsa_mode("SIDM_USER", ayanamsa_value, jd)
+    node_longitudes = corrected_mean_node_longitudes(jd, place, ayanamsa_value)
+
+    calculated_charts = {}
+    for label, factor in DIVISIONAL_FACTORS.items():
+        try:
+            raw_positions = drik.dhasavarga(
+                jd,
+                place,
+                divisional_chart_factor=factor,
+                set_rahu_ketu_as_true_nodes=False,
+                include_western_planets=False,
+            )
+            calculated_chart = calculated_chart_from_positions(raw_positions)
+            add_calculated_lagna(calculated_chart, jd, place, factor, drik)
+            add_corrected_nodes(calculated_chart, factor, node_longitudes, drik)
+            calculated_charts[label] = calculated_chart
+        except Exception as error:
+            notes.append(f"Calculated chart {label} failed: {error}")
+
+    if calculated_charts:
+        chart["calculated_charts"] = calculated_charts
+        notes.append("Calculated divisional charts added")
+        notes.append("Rahu/Ketu nodes corrected with swisseph MEAN_NODE")
+        notes.append("Calculated chart degree fields added")
+
+
 def enrich_chart(chart):
     # Future PyJHora-derived calculations should be added here.
     # For now, only record whether PyJHora can be imported.
@@ -196,6 +346,10 @@ def enrich_chart(chart):
             apply_motion_enrichment(chart, notes)
         except Exception as error:
             notes.append(f"PyJHora motion enrichment failed: {error}")
+        try:
+            apply_calculated_charts(chart, notes)
+        except Exception as error:
+            notes.append(f"Calculated charts enrichment failed: {error}")
 
     notes.append({
         "module_file": module_file,
@@ -213,6 +367,9 @@ def enrich_chart(chart):
         ),
         "enrichment": (
             "Computed fields added by local deterministic Python/PyJHora layer."
+        ),
+        "calculated_charts": (
+            "PyJHora generated divisional charts with corrected mean-node Rahu/Ketu."
         ),
     }
 

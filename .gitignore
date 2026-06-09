@@ -25,6 +25,8 @@ dist/
 
 # Temporary exploration output
 pyjhora_inventory*.json
+divisional_validation*.json
+node_investigation*.json
 
 # Local chart data and generated chart output
 charts_in/*

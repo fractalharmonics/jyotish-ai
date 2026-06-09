@@ -22,6 +22,48 @@ def longitude_to_absolute(degree, sign, minute, second):
     )
 
 
+def coordinate_to_decimal(coordinate, positive_direction):
+    match = re.match(
+        r"(?P<degree>\d+)\s+(?P<direction>[NSEW])\s+"
+        r"(?P<minute>\d+)'\s+(?P<second>\d+)\"",
+        coordinate.strip(),
+    )
+    if not match:
+        return None
+
+    decimal = (
+        int(match.group("degree"))
+        + int(match.group("minute")) / 60
+        + int(match.group("second")) / 3600
+    )
+    if match.group("direction") != positive_direction:
+        decimal *= -1
+
+    return round(decimal, 6)
+
+
+def parse_coordinates(text):
+    coordinate_match = re.search(
+        r"Place:\s+"
+        r"(?P<longitude>\d+\s+[EW]\s+\d+'\s+\d+\"),\s+"
+        r"(?P<latitude>\d+\s+[NS]\s+\d+'\s+\d+\")",
+        text,
+    )
+
+    if not coordinate_match:
+        return None
+
+    longitude_dms = coordinate_match.group("longitude").strip()
+    latitude_dms = coordinate_match.group("latitude").strip()
+
+    return {
+        "longitude_dms": longitude_dms,
+        "latitude_dms": latitude_dms,
+        "longitude_decimal": coordinate_to_decimal(longitude_dms, "E"),
+        "latitude_decimal": coordinate_to_decimal(latitude_dms, "N"),
+    }
+
+
 def parse_metadata(text):
     metadata = {}
 
@@ -52,6 +94,7 @@ def parse_metadata(text):
         place_match.group(1).strip()
         if place_match else None
     )
+    metadata["coordinates"] = parse_coordinates(text)
 
     return metadata
 
