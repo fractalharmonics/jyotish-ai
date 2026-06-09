@@ -214,17 +214,28 @@ def apply_motion_enrichment(chart, notes):
     notes.append("PyJHora motion enrichment completed successfully")
 
 
-def chart_entry(body, sign_index, degree_in_sign, source, node_source=None):
+def chart_entry(body, sign_index, degree_in_sign, source, factor, node_source=None):
     sign_index = int(sign_index)
-    degree_in_sign = round(float(degree_in_sign), 6)
     entry = {
         "body": body,
         "sign": INDEX_TO_SIGN[sign_index],
         "sign_index": sign_index,
-        "degree_in_sign": degree_in_sign,
-        "absolute_degree": round(sign_index * 30 + degree_in_sign, 6),
         "source": source,
     }
+    if factor == 1:
+        degree_in_sign = round(float(degree_in_sign), 6)
+        entry.update({
+            "degree_in_sign": degree_in_sign,
+            "absolute_degree": round(sign_index * 30 + degree_in_sign, 6),
+            "degree_source": "source_longitude",
+        })
+    else:
+        entry.update({
+            "degree_in_sign": None,
+            "absolute_degree": None,
+            "degree_status": "not_jhora_verified",
+            "degree_source": "suppressed_projected_degree",
+        })
     if node_source:
         entry["node_source"] = node_source
     return entry
@@ -244,47 +255,74 @@ def corrected_mean_node_longitudes(jd, place, ayanamsa_value):
 
 def add_corrected_nodes(calculated_chart, factor, node_longitudes, drik):
     for body in ("Rahu", "Ketu"):
-        sign_index, degree_in_sign = drik.dasavarga_from_long(
+        source_absolute_degree = node_longitudes[body]
+        sign_index, _ = drik.dasavarga_from_long(
             node_longitudes[body],
             divisional_chart_factor=factor,
         )
+        degree_in_sign = source_absolute_degree % 30 if factor == 1 else None
         calculated_chart[body] = chart_entry(
             body,
             sign_index,
             degree_in_sign,
             "pyjhora_calculated",
+            factor,
             node_source="swisseph_mean_node_corrected",
         )
 
 
-def add_calculated_lagna(calculated_chart, jd, place, factor, drik):
+def add_calculated_lagna(calculated_chart, jd, place, factor, drik, source_absolute_degree=None):
     sign_index, degree_in_sign = drik.ascendant(jd, place)[:2]
-    absolute_degree = sign_index * 30 + degree_in_sign
+    if source_absolute_degree is None:
+        source_absolute_degree = sign_index * 30 + degree_in_sign
     lagna_sign_index, lagna_degree = drik.dasavarga_from_long(
-        absolute_degree,
+        source_absolute_degree,
         divisional_chart_factor=factor,
     )
+    lagna_degree = source_absolute_degree % 30 if factor == 1 else None
     calculated_chart["Lagna"] = chart_entry(
         "Lagna",
         lagna_sign_index,
         lagna_degree,
         "pyjhora_calculated",
+        factor,
     )
 
 
-def calculated_chart_from_positions(raw_positions):
+def source_longitudes_from_positions(raw_positions):
+    return {
+        planet_id: sign_index * 30 + degree_in_sign
+        for planet_id, (sign_index, degree_in_sign) in raw_positions
+    }
+
+
+def source_longitudes_from_chart(chart, fallback_positions):
+    source_longitudes = source_longitudes_from_positions(fallback_positions)
+    for position in chart.get("primary_positions", []):
+        body = position["body"]
+        planet_id = BODY_TO_PYJHORA_ID.get(body)
+        if planet_id is not None:
+            source_longitudes[planet_id] = position["absolute_degree"]
+
+    return source_longitudes
+
+
+def calculated_chart_from_positions(raw_positions, source_longitudes, factor):
     calculated_chart = {}
     for planet_id, position in raw_positions:
         body = PYJHORA_ID_TO_BODY.get(planet_id)
         if body is None or body in {"Rahu", "Ketu"}:
             continue
 
-        sign_index, degree_in_sign = position
+        sign_index, _ = position
+        source_absolute_degree = source_longitudes[planet_id]
+        degree_in_sign = source_absolute_degree % 30 if factor == 1 else None
         calculated_chart[body] = chart_entry(
             body,
             sign_index,
             degree_in_sign,
             "pyjhora_calculated",
+            factor,
         )
 
     return calculated_chart
@@ -298,6 +336,16 @@ def apply_calculated_charts(chart, notes):
     ayanamsa_value = parse_ayanamsa_degrees(chart["metadata"]["ayanamsa"])
     drik.set_ayanamsa_mode("SIDM_USER", ayanamsa_value, jd)
     node_longitudes = corrected_mean_node_longitudes(jd, place, ayanamsa_value)
+    d1_positions = drik.dhasavarga(
+        jd,
+        place,
+        divisional_chart_factor=1,
+        set_rahu_ketu_as_true_nodes=False,
+        include_western_planets=False,
+    )
+    source_longitudes = source_longitudes_from_chart(chart, d1_positions)
+    source_longitudes[BODY_TO_PYJHORA_ID["Rahu"]] = node_longitudes["Rahu"]
+    source_longitudes[BODY_TO_PYJHORA_ID["Ketu"]] = node_longitudes["Ketu"]
 
     calculated_charts = {}
     for label, factor in DIVISIONAL_FACTORS.items():
@@ -309,8 +357,19 @@ def apply_calculated_charts(chart, notes):
                 set_rahu_ketu_as_true_nodes=False,
                 include_western_planets=False,
             )
-            calculated_chart = calculated_chart_from_positions(raw_positions)
-            add_calculated_lagna(calculated_chart, jd, place, factor, drik)
+            calculated_chart = calculated_chart_from_positions(
+                raw_positions,
+                source_longitudes,
+                factor,
+            )
+            add_calculated_lagna(
+                calculated_chart,
+                jd,
+                place,
+                factor,
+                drik,
+                source_absolute_degree=source_longitudes.get("L"),
+            )
             add_corrected_nodes(calculated_chart, factor, node_longitudes, drik)
             calculated_charts[label] = calculated_chart
         except Exception as error:
@@ -320,7 +379,10 @@ def apply_calculated_charts(chart, notes):
         chart["calculated_charts"] = calculated_charts
         notes.append("Calculated divisional charts added")
         notes.append("Rahu/Ketu nodes corrected with swisseph MEAN_NODE")
-        notes.append("Calculated chart degree fields added")
+        notes.append(
+            "Non-D1 varga degree fields suppressed pending "
+            "JHora-equivalent validation."
+        )
 
 
 def enrich_chart(chart):
@@ -369,7 +431,10 @@ def enrich_chart(chart):
             "Computed fields added by local deterministic Python/PyJHora layer."
         ),
         "calculated_charts": (
-            "PyJHora generated divisional charts with corrected mean-node Rahu/Ketu."
+            "D1 degrees are source-aligned. D9/D10/D20 signs are calculated, "
+            "but degrees are suppressed because the source JHora TXT does not "
+            "export full varga degrees and projected degrees have not been "
+            "verified against JHora display conventions."
         ),
     }
 

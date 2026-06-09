@@ -27,6 +27,7 @@ dist/
 pyjhora_inventory*.json
 divisional_validation*.json
 node_investigation*.json
+d9_offset_investigation*.json
 
 # Local chart data and generated chart output
 charts_in/*
