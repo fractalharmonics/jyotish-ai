@@ -22,7 +22,11 @@ def render_chart_file(chart_path):
 
     north_path = chart_output_dir / "d1_north_indian.svg"
     try:
-        north_svg = render_d1_north_indian(chart, chart_name)
+        north_svg = render_d1_north_indian(
+            chart,
+            chart_name,
+            show_planet_degrees=True,
+        )
         north_path.write_text(north_svg, encoding="utf-8")
         outputs.append(north_path)
         print(f"Rendered {north_path}")

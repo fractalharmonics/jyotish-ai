@@ -3,19 +3,24 @@ from __future__ import annotations
 import html
 import json
 import os
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / ".cache"))
 
 from weasyprint import HTML
+
+from renderers.stellium_adapter import build_western_chart
 
 
 CHARTS_OUT = ROOT / "charts_out"
 CHARTS_RENDERED = ROOT / "charts_rendered"
 REPORTS_OUT = ROOT / "reports"
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "page_1.html"
+PAGE_2_TEMPLATE = Path(__file__).resolve().parent / "templates" / "page_2.html"
 STYLES = Path(__file__).resolve().parent / "styles.css"
 
 GRAHAS = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu")
@@ -63,7 +68,8 @@ def main() -> None:
 
     for chart_path in chart_paths:
         output_path, page_count = build_report(chart_path)
-        print(f"Wrote {output_path} ({page_count} page)")
+        page_label = "page" if page_count == 1 else "pages"
+        print(f"Wrote {output_path} ({page_count} {page_label})")
 
 
 def build_report(chart_path: Path) -> tuple[Path, int]:
@@ -72,10 +78,19 @@ def build_report(chart_path: Path) -> tuple[Path, int]:
     rendered_dir = CHARTS_RENDERED / chart_name
     d1_svg = (rendered_dir / "d1_north_indian.svg").read_text()
     d9_svg = (rendered_dir / "d9_north_indian.svg").read_text()
+    western_svg = (rendered_dir / "d1_western.svg").read_text()
+    page_2 = render_template(
+        {
+            "western_svg": western_svg,
+            "western_rows": western_rows(chart),
+            "western_aspect_rows": western_aspect_rows(chart, chart_name),
+        },
+        template_path=PAGE_2_TEMPLATE,
+    )
 
     html_text = render_template(
         {
-            "report_title": escape(f"{chart_name} Page 1"),
+            "report_title": escape(f"{chart_name} Report"),
             "styles": STYLES.read_text(),
             "name": escape(chart_name),
             "birth_date": escape(chart.get("metadata", {}).get("date", "")),
@@ -87,18 +102,19 @@ def build_report(chart_path: Path) -> tuple[Path, int]:
             "graha_rows": graha_rows(chart),
             "aspect_rows": aspect_rows(chart),
             "rashi_rows": rashi_rows(chart),
+            "page_2": page_2,
         }
     )
 
     REPORTS_OUT.mkdir(parents=True, exist_ok=True)
-    output_path = REPORTS_OUT / f"{chart_name}_page1.pdf"
+    output_path = REPORTS_OUT / f"{chart_name}_report.pdf"
     document = HTML(string=html_text, base_url=str(ROOT)).render()
     document.write_pdf(output_path)
     return output_path, len(document.pages)
 
 
-def render_template(values: dict[str, str]) -> str:
-    template = TEMPLATE.read_text()
+def render_template(values: dict[str, str], *, template_path: Path = TEMPLATE) -> str:
+    template = template_path.read_text()
     for key, value in values.items():
         template = template.replace("{{ " + key + " }}", value)
     return template
@@ -116,15 +132,52 @@ def graha_rows(chart: dict) -> str:
             "<tr>"
             f"<td>{escape(ABBREVIATIONS[graha])}</td>"
             f"<td>{escape(longitude_text(position))}</td>"
-            f"<td>{escape(sign_display(position.get('sign')))}</td>"
             f"<td>{escape(position.get('nakshatra') or '')}</td>"
             f"<td>{escape(position.get('pada') or '')}</td>"
             f"<td>{escape(position.get('chara_karaka') or '')}</td>"
             f"<td>{escape(sign_display(d9.get(graha, {}).get('sign')))}</td>"
-            f"<td>{escape(position.get('motion_status') or '')}</td>"
+            f"<td>{escape(motion_text(position))}</td>"
             f"<td>{escape(speed_text(position.get('speed')))}</td>"
             "</tr>"
         )
+    return "\n".join(rows)
+
+
+def western_rows(chart: dict) -> str:
+    primary = primary_positions(chart)
+    asc_sign = chart.get("calculated_charts", {}).get("d1", {}).get("Lagna", {}).get("sign")
+    rows = []
+    for graha in GRAHAS:
+        position = primary.get(graha)
+        if not position:
+            continue
+        sign = position.get("sign")
+        rows.append(
+            "<tr>"
+            f"<td>{escape(ABBREVIATIONS[graha])}</td>"
+            f"<td>{escape(longitude_text(position))}</td>"
+            f"<td>{escape(whole_sign_house(asc_sign, sign))}</td>"
+            f"<td>{escape(motion_text(position))}</td>"
+            f"<td>{escape(speed_text(position.get('speed')))}</td>"
+            "</tr>"
+        )
+    return "\n".join(rows)
+
+
+def western_aspect_rows(chart: dict, chart_name: str) -> str:
+    stellium_chart = build_western_chart(chart, chart_name)
+    rows = []
+    for aspect in stellium_chart.aspects:
+        rows.append(
+            "<tr>"
+            f"<td>{escape(western_body_label(aspect.object1.name))}</td>"
+            f"<td>{escape(aspect.aspect_name)}</td>"
+            f"<td>{escape(western_body_label(aspect.object2.name))}</td>"
+            f"<td>{escape(f'{aspect.orb:.2f}°')}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return '<tr><td colspan="4" class="muted">No Opposition, Trine, or Square aspects within configured orb.</td></tr>'
     return "\n".join(rows)
 
 
@@ -238,16 +291,45 @@ def rashi_drishti_signs(sign: str) -> list[str]:
 
 
 def sign_display(sign: str | None) -> str:
-    return SIGN_NAMES.get(sign or "", sign or "")
+    return sign or ""
+
+
+def whole_sign_house(asc_sign: str | None, sign: str | None) -> str:
+    if asc_sign not in SIGNS or sign not in SIGNS:
+        return ""
+    return str(((SIGNS.index(sign) - SIGNS.index(asc_sign)) % 12) + 1)
+
+
+def motion_text(position: dict) -> str:
+    status = position.get("motion_status")
+    if status == "direct" or position.get("direct") is True:
+        return "Direct"
+    if status == "retrograde" or position.get("retrograde") is True:
+        return "Retrograde"
+    if status == "stationary" or position.get("stationary") is True:
+        return "Stationary"
+    if status == "not_applicable":
+        return "Not applicable"
+    if status:
+        return str(status).replace("_", " ").title()
+    return ""
 
 
 def speed_text(speed: object) -> str:
     if speed is None:
-        return ""
+        return "—"
     try:
-        return f"{float(speed):.4f}"
+        return f"{float(speed):.4f}°/day"
     except (TypeError, ValueError):
         return str(speed)
+
+
+def western_body_label(name: str) -> str:
+    if name == "True Node":
+        return "Ra"
+    if name == "South Node":
+        return "Ke"
+    return ABBREVIATIONS.get(name, name)
 
 
 def escape(value: object) -> str:

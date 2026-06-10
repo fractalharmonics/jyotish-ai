@@ -21,6 +21,16 @@ PLANET_ABBREVIATIONS = {
     "Ketu": "Ke",
 }
 
+MONOCHROME_THEME = {
+    "bg": "#ffffff",
+    "line": "#333333",
+    "sign_text": "#555555",
+    "planet_text": "#222222",
+    "house_marker": "#222222",
+    "center_bg": "#ffffff",
+    "asc_bg": "#ffffff",
+}
+
 
 class DegreeNorthIndianRenderer(NorthIndianRenderer):
     def __init__(
@@ -92,7 +102,9 @@ def render_north_indian(
         degree_labels=_degree_labels_from_primary_positions(chart),
         show_planet_degrees=show_planet_degrees,
     )
+    renderer.theme = MONOCHROME_THEME
     svg = renderer.render(stellium_chart)
+    svg = _strip_chart_metadata(svg)
     return _underline_retrograde_abbreviations(
         svg,
         _retrograde_labels(chart, show_planet_degrees=show_planet_degrees),
@@ -161,4 +173,35 @@ def _underlined_label(match, abbreviation: str, full_label: str) -> str:
         f'<tspan text-decoration="underline">{abbreviation}</tspan>'
         f"{suffix_tspan}"
         f"{match.group(2)}"
+    )
+
+
+def _strip_chart_metadata(svg: str) -> str:
+    svg = re.sub(
+        r'<svg baseProfile="full" height="688" version="1.1" width="640"',
+        '<svg baseProfile="full" height="640" version="1.1" width="640" viewBox="0 48 640 640"',
+        svg,
+        count=1,
+    )
+    svg = re.sub(r'<text[^>]* y="(?:14|29|42|55)"[^>]*>[^<]*</text>', "", svg)
+    svg = re.sub(r'(<text\b[^>]*>)As</text>', _normalize_ascendant_label, svg)
+    svg = _enlarge_chart_labels(svg)
+    return svg
+
+
+def _normalize_ascendant_label(match: re.Match[str]) -> str:
+    tag = re.sub(r'\sfont-weight="bold"', "", match.group(1))
+    return f"{tag}As</text>"
+
+
+def _enlarge_chart_labels(svg: str) -> str:
+    svg = re.sub(
+        r'(<text\b(?=[^>]*fill="#555555")[^>]*font-size=")10(")',
+        r"\g<1>12\2",
+        svg,
+    )
+    return re.sub(
+        r'(<text\b(?=[^>]*fill="#222222")[^>]*font-size=")11(")',
+        r"\g<1>13\2",
+        svg,
     )
