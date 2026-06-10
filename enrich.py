@@ -56,8 +56,24 @@ def parse_birth_date(date_text):
     return datetime.strptime(date_text, "%B %d, %Y")
 
 
+def parse_chart_time(time_text):
+    normalized_time = " ".join(str(time_text).strip().split())
+    formats = (
+        "%I:%M:%S %p",
+        "%I:%M %p",
+        "%H:%M:%S",
+        "%H:%M",
+    )
+    for time_format in formats:
+        try:
+            return datetime.strptime(normalized_time.upper(), time_format)
+        except ValueError:
+            continue
+    raise ValueError(f"Unsupported time format: {time_text}")
+
+
 def parse_birth_time(time_text):
-    return datetime.strptime(time_text, "%I:%M:%S %p")
+    return parse_chart_time(time_text)
 
 
 def parse_timezone(time_zone_text):
@@ -391,6 +407,7 @@ def enrich_chart(chart):
     notes = []
     module_file = None
     module_package = None
+    chart.setdefault("calculated_charts", {})
 
     if PYJHORA_SPEC:
         module_file = PYJHORA_SPEC.origin
@@ -412,6 +429,9 @@ def enrich_chart(chart):
             apply_calculated_charts(chart, notes)
         except Exception as error:
             notes.append(f"Calculated charts enrichment failed: {error}")
+
+    if not chart.get("calculated_charts"):
+        chart["calculated_charts"] = {}
 
     notes.append({
         "module_file": module_file,

@@ -67,14 +67,24 @@ def main() -> None:
         return
 
     for chart_path in chart_paths:
-        output_path, page_count = build_report(chart_path)
+        result = build_report(chart_path)
+        if result is None:
+            continue
+        output_path, page_count = result
         page_label = "page" if page_count == 1 else "pages"
         print(f"Wrote {output_path} ({page_count} {page_label})")
 
 
-def build_report(chart_path: Path) -> tuple[Path, int]:
+def build_report(chart_path: Path) -> tuple[Path, int] | None:
     chart_name = chart_path.stem
     chart = json.loads(chart_path.read_text())
+    if not has_required_calculated_charts(chart):
+        print(
+            f"Skipping report for {chart_name}: missing calculated_charts.d1/d9; "
+            "enrichment incomplete"
+        )
+        return None
+
     rendered_dir = CHARTS_RENDERED / chart_name
     d1_svg = (rendered_dir / "d1_north_indian.svg").read_text()
     d9_svg = (rendered_dir / "d9_north_indian.svg").read_text()
@@ -111,6 +121,13 @@ def build_report(chart_path: Path) -> tuple[Path, int]:
     document = HTML(string=html_text, base_url=str(ROOT)).render()
     document.write_pdf(output_path)
     return output_path, len(document.pages)
+
+
+def has_required_calculated_charts(chart: dict) -> bool:
+    calculated_charts = chart.get("calculated_charts")
+    if not isinstance(calculated_charts, dict):
+        return False
+    return bool(calculated_charts.get("d1")) and bool(calculated_charts.get("d9"))
 
 
 def western_chart_for_report(rendered_dir: Path) -> str:

@@ -56,6 +56,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Validate generated chart JSON structure and integrity."
     )
+    strict_group = parser.add_mutually_exclusive_group()
+    strict_group.add_argument(
+        "--strict",
+        action="store_true",
+        help="Fail when enrichment-dependent calculated charts are missing.",
+    )
+    strict_group.add_argument(
+        "--non-strict",
+        action="store_false",
+        dest="strict",
+        help="Warn instead of failing when calculated charts are missing.",
+    )
+    parser.set_defaults(strict=False)
     parser.add_argument(
         "paths",
         nargs="*",
@@ -79,8 +92,12 @@ def assert_contains_keys(container, expected_keys, label):
     assert not missing, f"{label} missing keys: {sorted(missing)}"
 
 
-def validate_chart(chart: dict, chart_label: str) -> None:
-    assert_contains_keys(chart, EXPECTED_TOP_LEVEL_KEYS, f"{chart_label} top-level JSON")
+def validate_chart(chart: dict, chart_label: str, *, strict: bool) -> list[str]:
+    warnings = []
+    expected_top_level_keys = set(EXPECTED_TOP_LEVEL_KEYS)
+    if not strict:
+        expected_top_level_keys.discard("calculated_charts")
+    assert_contains_keys(chart, expected_top_level_keys, f"{chart_label} top-level JSON")
 
     metadata = chart["metadata"]
     assert_contains_keys(metadata, EXPECTED_METADATA_KEYS, f"{chart_label} metadata")
@@ -98,7 +115,18 @@ def validate_chart(chart: dict, chart_label: str) -> None:
         f"expected {EXPECTED_PRIMARY_BODIES}, got {list(primary_by_body)}"
     )
 
-    calculated_charts = chart["calculated_charts"]
+    calculated_charts = chart.get("calculated_charts")
+    if not calculated_charts:
+        warning = f"{chart_label}: missing calculated_charts; enrichment incomplete"
+        if strict:
+            raise AssertionError(warning)
+        warnings.append(warning)
+        try:
+            validate_motion_fields(chart_label, primary_by_body)
+        except AssertionError as error:
+            warnings.append(f"{chart_label}: {error}; enrichment incomplete")
+        return warnings
+
     assert_contains_keys(
         calculated_charts,
         EXPECTED_CALCULATED_CHARTS,
@@ -109,6 +137,7 @@ def validate_chart(chart: dict, chart_label: str) -> None:
     validate_divisional_suppression(chart_label, calculated_charts)
     validate_node_corrections(chart_label, calculated_charts["d1"])
     validate_motion_fields(chart_label, primary_by_body)
+    return warnings
 
 
 def validate_d1(chart_label: str, primary_by_body: dict, d1: dict) -> None:
@@ -183,10 +212,26 @@ def validate_motion_fields(chart_label: str, primary_by_body: dict) -> None:
 
 
 def main() -> None:
-    for path in chart_paths(parse_args().paths):
+    args = parse_args()
+    had_warnings = False
+    for path in chart_paths(args.paths):
         with path.open("r", encoding="utf-8") as input_file:
-            validate_chart(json.load(input_file), path.stem)
+            try:
+                warnings = validate_chart(
+                    json.load(input_file),
+                    path.stem,
+                    strict=args.strict,
+                )
+            except AssertionError as error:
+                print(error)
+                raise SystemExit(1) from None
+        for warning in warnings:
+            had_warnings = True
+            print(warning)
         print(f"Validation passed: {path}")
+
+    if had_warnings and args.strict:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

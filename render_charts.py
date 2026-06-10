@@ -15,6 +15,13 @@ def render_chart_file(chart_path):
         chart = json.load(input_file)
 
     chart_name = chart_path.stem
+    if not has_required_calculated_charts(chart):
+        print(
+            f"Skipping {chart_name}: missing calculated_charts.d1/d9; "
+            "enrichment incomplete"
+        )
+        return []
+
     chart_output_dir = OUTPUT_DIR / chart_name
     chart_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -58,6 +65,13 @@ def render_chart_file(chart_path):
         traceback.print_exc()
 
     return outputs
+
+
+def has_required_calculated_charts(chart):
+    calculated_charts = chart.get("calculated_charts")
+    if not isinstance(calculated_charts, dict):
+        return False
+    return bool(calculated_charts.get("d1")) and bool(calculated_charts.get("d9"))
 
 
 def main():
