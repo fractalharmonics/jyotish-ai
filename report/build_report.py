@@ -78,10 +78,10 @@ def build_report(chart_path: Path) -> tuple[Path, int]:
     rendered_dir = CHARTS_RENDERED / chart_name
     d1_svg = (rendered_dir / "d1_north_indian.svg").read_text()
     d9_svg = (rendered_dir / "d9_north_indian.svg").read_text()
-    western_svg = (rendered_dir / "d1_western.svg").read_text()
+    western_chart = western_chart_for_report(rendered_dir)
     page_2 = render_template(
         {
-            "western_svg": western_svg,
+            "western_chart": western_chart,
             "western_rows": western_rows(chart),
             "western_aspect_rows": western_aspect_rows(chart, chart_name),
         },
@@ -111,6 +111,22 @@ def build_report(chart_path: Path) -> tuple[Path, int]:
     document = HTML(string=html_text, base_url=str(ROOT)).render()
     document.write_pdf(output_path)
     return output_path, len(document.pages)
+
+
+def western_chart_for_report(rendered_dir: Path) -> str:
+    png_path = rendered_dir / "d1_western.png"
+    if png_path.exists() and png_path.stat().st_size > 50_000:
+        return (
+            '<img class="western-chart-image" '
+            f'src="{png_path.resolve().as_uri()}" '
+            'alt="Western chart">'
+        )
+
+    print(
+        f"WARNING: {png_path} missing or blank-looking; embedding d1_western.svg. "
+        "Western glyph rendering may differ in PDF."
+    )
+    return (rendered_dir / "d1_western.svg").read_text()
 
 
 def render_template(values: dict[str, str], *, template_path: Path = TEMPLATE) -> str:

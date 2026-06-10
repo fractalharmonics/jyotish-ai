@@ -3,7 +3,7 @@ import traceback
 from pathlib import Path
 
 from renderers.north_indian import render_d1_north_indian, render_d9_north_indian
-from renderers.western import render_d1_western
+from renderers.western import create_western_png, render_d1_western
 
 
 INPUT_DIR = Path("charts_out")
@@ -45,10 +45,14 @@ def render_chart_file(chart_path):
         traceback.print_exc()
 
     western_path = chart_output_dir / "d1_western.svg"
+    western_png_path = chart_output_dir / "d1_western.png"
     try:
         render_d1_western(chart, chart_name, western_path)
         outputs.append(western_path)
         print(f"Rendered {western_path}")
+        if create_western_png(western_path, western_png_path):
+            outputs.append(western_png_path)
+            print(f"Rendered {western_png_path}")
     except Exception as error:
         print(f"ERROR rendering {chart_path} Western D1: {error}")
         traceback.print_exc()

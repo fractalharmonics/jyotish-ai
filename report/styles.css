@@ -182,6 +182,13 @@ td {
   width: auto;
 }
 
+.western-chart-image {
+  height: 535px;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
 .western-table td,
 .western-aspect-table td {
   font-size: 12px;
