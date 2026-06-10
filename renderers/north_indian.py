@@ -82,6 +82,24 @@ def render_d9_north_indian(chart: dict, chart_name: str) -> str:
     )
 
 
+def render_d10_north_indian(chart: dict, chart_name: str) -> str:
+    return render_north_indian(
+        chart,
+        chart_name,
+        chart_key="d10",
+        show_planet_degrees=False,
+    )
+
+
+def render_d20_north_indian(chart: dict, chart_name: str) -> str:
+    return render_north_indian(
+        chart,
+        chart_name,
+        chart_key="d20",
+        show_planet_degrees=False,
+    )
+
+
 def render_north_indian(
     chart: dict,
     chart_name: str,
@@ -158,7 +176,7 @@ def _underline_retrograde_abbreviations(
 ) -> str:
     for full_label, abbreviation in retrograde_labels.items():
         svg = re.sub(
-            rf"(>){re.escape(full_label)}(<)",
+            rf"(<text\b(?P<attrs>[^>]*)>){re.escape(full_label)}(</text>)",
             lambda match: _underlined_label(match, abbreviation, full_label),
             svg,
         )
@@ -166,14 +184,47 @@ def _underline_retrograde_abbreviations(
 
 
 def _underlined_label(match, abbreviation: str, full_label: str) -> str:
-    suffix = full_label[len(abbreviation) :]
-    suffix_tspan = f"<tspan>{suffix}</tspan>" if suffix else ""
-    return (
-        f"{match.group(1)}"
-        f'<tspan text-decoration="underline">{abbreviation}</tspan>'
-        f"{suffix_tspan}"
-        f"{match.group(2)}"
+    attrs = match.group("attrs")
+    x = _svg_float_attr(attrs, "x")
+    y = _svg_float_attr(attrs, "y")
+    font_size = _svg_float_attr(attrs, "font-size") or 15.0
+    fill = _svg_attr(attrs, "fill") or "#222222"
+
+    if x is None or y is None:
+        return match.group(0)
+
+    char_width = font_size * 0.56
+    full_width = len(full_label) * char_width
+    abbreviation_width = len(abbreviation) * char_width
+    x1 = x - full_width / 2
+    x2 = x1 + abbreviation_width
+    underline_y = y + font_size * 0.22
+    stroke_width = max(1.0, font_size * 0.08)
+
+    text = f"{match.group(1)}{full_label}{match.group(3)}"
+    underline = (
+        f'<line stroke="{fill}" stroke-width="{stroke_width:.1f}" '
+        f'x1="{x1:.1f}" x2="{x2:.1f}" '
+        f'y1="{underline_y:.1f}" y2="{underline_y:.1f}" />'
     )
+    return f"{text}{underline}"
+
+
+def _svg_attr(attrs: str, name: str) -> str | None:
+    match = re.search(rf'\b{name}="([^"]+)"', attrs)
+    if not match:
+        return None
+    return match.group(1)
+
+
+def _svg_float_attr(attrs: str, name: str) -> float | None:
+    value = _svg_attr(attrs, name)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _strip_chart_metadata(svg: str) -> str:
@@ -197,11 +248,11 @@ def _normalize_ascendant_label(match: re.Match[str]) -> str:
 def _enlarge_chart_labels(svg: str) -> str:
     svg = re.sub(
         r'(<text\b(?=[^>]*fill="#555555")[^>]*font-size=")10(")',
-        r"\g<1>12\2",
+        r"\g<1>14\2",
         svg,
     )
     return re.sub(
         r'(<text\b(?=[^>]*fill="#222222")[^>]*font-size=")11(")',
-        r"\g<1>13\2",
+        r"\g<1>15\2",
         svg,
     )

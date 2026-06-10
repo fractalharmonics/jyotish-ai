@@ -1,10 +1,58 @@
   <main class="page page-2">
-    <section class="page-title">
-      <h1>Wheel Chart</h1>
+    <section>
+      <h2>Jyotish Graha Summary</h2>
+      <table class="graha-table">
+        <thead>
+          <tr>
+            <th>Graha</th>
+            <th>Longitude</th>
+            <th>Dignity</th>
+            <th>Nakshatra</th>
+            <th>Pada</th>
+            <th>Chara Karaka</th>
+            <th>D9 Sign</th>
+            <th>Motion</th>
+            <th>Speed</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ graha_rows }}
+        </tbody>
+      </table>
     </section>
 
-    <section class="western-chart-block">
-      <div class="western-chart-svg">{{ western_chart }}</div>
+    <section>
+      <h2>Graha Drishti</h2>
+      <table class="aspect-table">
+        <thead>
+          <tr>
+            <th>Graha</th>
+            <th>Aspects</th>
+            <th>Special Aspect Type</th>
+            <th>Targets</th>
+            <th>Orb</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ aspect_rows }}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Rashi Drishti</h2>
+      <table class="rashi-table">
+        <thead>
+          <tr>
+            <th>Rashi</th>
+            <th>Aspected Rashis</th>
+            <th>Targets</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ rashi_rows }}
+        </tbody>
+      </table>
     </section>
 
     <section>
@@ -24,3 +72,4 @@
       </table>
     </section>
   </main>
+  {{ page_3 }}

@@ -42,6 +42,11 @@ ASPECT_DEFINITIONS = {
 }
 
 ASPECT_ORB_DEGREES = 6.0
+NODE_AXIS_PAIRS = {
+    frozenset(("Rahu", "Ketu")),
+    frozenset(("Ra", "Ke")),
+    frozenset(("True Node", "South Node")),
+}
 
 
 @dataclass(frozen=True)
@@ -115,6 +120,10 @@ def aspect_summary(chart: CalculatedChart) -> dict[str, int]:
     for aspect in chart.aspects:
         summary[aspect.aspect_name] = summary.get(aspect.aspect_name, 0) + 1
     return summary
+
+
+def is_node_axis_pair(body1: str, body2: str) -> bool:
+    return frozenset((body1, body2)) in NODE_AXIS_PAIRS
 
 
 def source_bodies(chart: dict, *, chart_key: str = "d1") -> list[SourceBody]:
@@ -201,6 +210,8 @@ def _aspects(positions: Iterable[CelestialPosition]) -> tuple[Aspect, ...]:
 
     for index, object1 in enumerate(aspect_objects):
         for object2 in aspect_objects[index + 1 :]:
+            if is_node_axis_pair(object1.name, object2.name):
+                continue
             separation = _separation(object1.longitude, object2.longitude)
             for aspect_name, aspect_degree in ASPECT_DEFINITIONS.items():
                 orb = abs(separation - aspect_degree)

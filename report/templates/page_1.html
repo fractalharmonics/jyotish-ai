@@ -29,61 +29,16 @@
         <figcaption>D9 Navamsa</figcaption>
         <div class="chart-svg">{{ d9_north_svg }}</div>
       </figure>
+      <figure>
+        <figcaption>D10 Dasamsa</figcaption>
+        <div class="chart-svg">{{ d10_north_svg }}</div>
+      </figure>
+      <figure>
+        <figcaption>D20 Vimsamsa</figcaption>
+        <div class="chart-svg">{{ d20_north_svg }}</div>
+      </figure>
     </section>
 
-    <section>
-      <h2>Graha Summary</h2>
-      <table class="graha-table">
-        <thead>
-          <tr>
-            <th>Graha</th>
-            <th>Longitude</th>
-            <th>Nakshatra</th>
-            <th>Pada</th>
-            <th>Chara Karaka</th>
-            <th>D9 Sign</th>
-            <th>Motion</th>
-            <th>Speed</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ graha_rows }}
-        </tbody>
-      </table>
-    </section>
-
-    <section>
-      <h2>Graha Drishti</h2>
-      <table class="aspect-table">
-        <thead>
-          <tr>
-            <th>Graha</th>
-            <th>Aspects</th>
-            <th>Special Aspect Type</th>
-            <th>Targets</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ aspect_rows }}
-        </tbody>
-      </table>
-    </section>
-
-    <section>
-      <h2>Rashi Drishti</h2>
-      <table class="rashi-table">
-        <thead>
-          <tr>
-            <th>Rashi</th>
-            <th>Aspected Rashis</th>
-            <th>Targets</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ rashi_rows }}
-        </tbody>
-      </table>
-    </section>
   </main>
   {{ page_2 }}
 </body>

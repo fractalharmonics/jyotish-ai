@@ -50,6 +50,15 @@ DIVISIONAL_FACTORS = {
     "d10": 10,
     "d20": 20,
 }
+D10_CHART_METHOD = 1
+D10_METHOD = "Traditional Parasara Dasamsa"
+D10_METHOD_STATUS = "confirmed_pyjhora_chart_method_1"
+D10_METHOD_NOTE = (
+    "D10 calculated from source-aligned D1 longitudes with PyJHora "
+    "jhora.horoscope.chart.charts.divisional_positions_from_rasi_positions("
+    "divisional_chart_factor=10, chart_method=1); PyJHora documents "
+    "dasamsa_chart chart_method=1 as Traditional Parasara."
+)
 
 
 def parse_birth_date(date_text):
@@ -269,12 +278,43 @@ def corrected_mean_node_longitudes(jd, place, ayanamsa_value):
     }
 
 
-def add_corrected_nodes(calculated_chart, factor, node_longitudes, drik):
+def varga_sign_from_source_longitude(
+    source_absolute_degree,
+    factor,
+    drik,
+    charts_module=None,
+):
+    if factor == 10 and charts_module is not None:
+        source_sign = int(source_absolute_degree // 30) % 12
+        source_degree = source_absolute_degree % 30
+        positions = charts_module.divisional_positions_from_rasi_positions(
+            [["X", [source_sign, source_degree]]],
+            divisional_chart_factor=10,
+            chart_method=D10_CHART_METHOD,
+        )
+        return positions[0][1][0]
+
+    sign_index, _ = drik.dasavarga_from_long(
+        source_absolute_degree,
+        divisional_chart_factor=factor,
+    )
+    return sign_index
+
+
+def add_corrected_nodes(
+    calculated_chart,
+    factor,
+    node_longitudes,
+    drik,
+    charts_module=None,
+):
     for body in ("Rahu", "Ketu"):
         source_absolute_degree = node_longitudes[body]
-        sign_index, _ = drik.dasavarga_from_long(
-            node_longitudes[body],
-            divisional_chart_factor=factor,
+        sign_index = varga_sign_from_source_longitude(
+            source_absolute_degree,
+            factor,
+            drik,
+            charts_module,
         )
         degree_in_sign = source_absolute_degree % 30 if factor == 1 else None
         calculated_chart[body] = chart_entry(
@@ -287,13 +327,23 @@ def add_corrected_nodes(calculated_chart, factor, node_longitudes, drik):
         )
 
 
-def add_calculated_lagna(calculated_chart, jd, place, factor, drik, source_absolute_degree=None):
+def add_calculated_lagna(
+    calculated_chart,
+    jd,
+    place,
+    factor,
+    drik,
+    source_absolute_degree=None,
+    charts_module=None,
+):
     sign_index, degree_in_sign = drik.ascendant(jd, place)[:2]
     if source_absolute_degree is None:
         source_absolute_degree = sign_index * 30 + degree_in_sign
-    lagna_sign_index, lagna_degree = drik.dasavarga_from_long(
+    lagna_sign_index = varga_sign_from_source_longitude(
         source_absolute_degree,
-        divisional_chart_factor=factor,
+        factor,
+        drik,
+        charts_module,
     )
     lagna_degree = source_absolute_degree % 30 if factor == 1 else None
     calculated_chart["Lagna"] = chart_entry(
@@ -323,6 +373,35 @@ def source_longitudes_from_chart(chart, fallback_positions):
     return source_longitudes
 
 
+def raw_positions_for_factor(
+    jd,
+    place,
+    factor,
+    drik,
+    charts_module,
+    source_longitudes=None,
+):
+    if factor == 10:
+        rasi_positions = [
+            [planet_id, [int(source_longitude // 30) % 12, source_longitude % 30]]
+            for planet_id, source_longitude in (source_longitudes or {}).items()
+            if planet_id != "L"
+        ]
+        return charts_module.divisional_positions_from_rasi_positions(
+            rasi_positions,
+            divisional_chart_factor=10,
+            chart_method=D10_CHART_METHOD,
+        )
+
+    return drik.dhasavarga(
+        jd,
+        place,
+        divisional_chart_factor=factor,
+        set_rahu_ketu_as_true_nodes=False,
+        include_western_planets=False,
+    )
+
+
 def calculated_chart_from_positions(raw_positions, source_longitudes, factor):
     calculated_chart = {}
     for planet_id, position in raw_positions:
@@ -344,9 +423,19 @@ def calculated_chart_from_positions(raw_positions, source_longitudes, factor):
     return calculated_chart
 
 
+def annotate_chart_method(label, calculated_chart):
+    if label != "d10":
+        return
+
+    for entry in calculated_chart.values():
+        entry["method"] = D10_METHOD
+        entry["method_status"] = D10_METHOD_STATUS
+
+
 def apply_calculated_charts(chart, notes):
     with contextlib.redirect_stdout(io.StringIO()):
         from jhora.panchanga import drik
+        from jhora.horoscope.chart import charts
 
     jd, place = build_jd_and_place(chart["metadata"], notes)
     ayanamsa_value = parse_ayanamsa_degrees(chart["metadata"]["ayanamsa"])
@@ -366,12 +455,13 @@ def apply_calculated_charts(chart, notes):
     calculated_charts = {}
     for label, factor in DIVISIONAL_FACTORS.items():
         try:
-            raw_positions = drik.dhasavarga(
+            raw_positions = raw_positions_for_factor(
                 jd,
                 place,
-                divisional_chart_factor=factor,
-                set_rahu_ketu_as_true_nodes=False,
-                include_western_planets=False,
+                factor,
+                drik,
+                charts,
+                source_longitudes=source_longitudes,
             )
             calculated_chart = calculated_chart_from_positions(
                 raw_positions,
@@ -385,8 +475,16 @@ def apply_calculated_charts(chart, notes):
                 factor,
                 drik,
                 source_absolute_degree=source_longitudes.get("L"),
+                charts_module=charts,
             )
-            add_corrected_nodes(calculated_chart, factor, node_longitudes, drik)
+            add_corrected_nodes(
+                calculated_chart,
+                factor,
+                node_longitudes,
+                drik,
+                charts_module=charts,
+            )
+            annotate_chart_method(label, calculated_chart)
             calculated_charts[label] = calculated_chart
         except Exception as error:
             notes.append(f"Calculated chart {label} failed: {error}")
@@ -399,6 +497,8 @@ def apply_calculated_charts(chart, notes):
             "Non-D1 varga degree fields suppressed pending "
             "JHora-equivalent validation."
         )
+        if "d10" in calculated_charts:
+            notes.append(D10_METHOD_NOTE)
 
 
 def enrich_chart(chart):

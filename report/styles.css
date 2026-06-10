@@ -68,9 +68,9 @@ dd {
 
 .charts {
   display: grid;
-  gap: 4px;
+  gap: 6px 8px;
   grid-template-columns: 1fr 1fr;
-  margin: 0 0 4px;
+  margin: 0;
 }
 
 figure {
@@ -88,16 +88,16 @@ h2 {
 }
 
 .chart-svg {
-  height: 395px;
+  height: 390px;
   overflow: hidden;
   text-align: center;
 }
 
 .chart-svg svg {
-  height: auto;
+  height: 390px;
   max-height: 100%;
   max-width: 100%;
-  width: 100%;
+  width: auto;
 }
 
 section {
@@ -151,7 +151,8 @@ td {
   margin: -1px 0 2px;
 }
 
-.page-2 {
+.page-2,
+.page-3 {
   break-before: page;
 }
 
@@ -186,6 +187,22 @@ td {
   height: 535px;
   max-width: 100%;
   object-fit: contain;
+  width: auto;
+}
+
+.western-chart-full {
+  margin: 0;
+}
+
+.page-3 .western-chart-svg {
+  height: 1000px;
+}
+
+.page-3 .western-chart-svg svg,
+.page-3 .western-chart-image {
+  height: 1000px;
+  max-height: 100%;
+  max-width: 100%;
   width: auto;
 }
 

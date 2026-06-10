@@ -13,7 +13,8 @@ os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / ".cache"))
 
 from weasyprint import HTML
 
-from renderers.stellium_adapter import build_western_chart
+from dignity import dignity_for_chart
+from renderers.stellium_adapter import build_western_chart, is_node_axis_pair
 
 
 CHARTS_OUT = ROOT / "charts_out"
@@ -21,9 +22,11 @@ CHARTS_RENDERED = ROOT / "charts_rendered"
 REPORTS_OUT = ROOT / "reports"
 TEMPLATE = Path(__file__).resolve().parent / "templates" / "page_1.html"
 PAGE_2_TEMPLATE = Path(__file__).resolve().parent / "templates" / "page_2.html"
+PAGE_3_TEMPLATE = Path(__file__).resolve().parent / "templates" / "page_3.html"
 STYLES = Path(__file__).resolve().parent / "styles.css"
 
 GRAHAS = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu")
+GRAHA_DRISHTI_BODIES = ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn")
 ABBREVIATIONS = {
     "Sun": "Su",
     "Moon": "Mo",
@@ -80,7 +83,7 @@ def build_report(chart_path: Path) -> tuple[Path, int] | None:
     chart = json.loads(chart_path.read_text())
     if not has_required_calculated_charts(chart):
         print(
-            f"Skipping report for {chart_name}: missing calculated_charts.d1/d9; "
+            f"Skipping report for {chart_name}: missing calculated_charts.d1/d9/d10/d20; "
             "enrichment incomplete"
         )
         return None
@@ -88,12 +91,22 @@ def build_report(chart_path: Path) -> tuple[Path, int] | None:
     rendered_dir = CHARTS_RENDERED / chart_name
     d1_svg = (rendered_dir / "d1_north_indian.svg").read_text()
     d9_svg = (rendered_dir / "d9_north_indian.svg").read_text()
+    d10_svg = (rendered_dir / "d10_north_indian.svg").read_text()
+    d20_svg = (rendered_dir / "d20_north_indian.svg").read_text()
     western_chart = western_chart_for_report(rendered_dir)
-    page_2 = render_template(
+    page_3 = render_template(
         {
             "western_chart": western_chart,
-            "western_rows": western_rows(chart),
+        },
+        template_path=PAGE_3_TEMPLATE,
+    )
+    page_2 = render_template(
+        {
+            "graha_rows": graha_rows(chart),
+            "aspect_rows": aspect_rows(chart),
+            "rashi_rows": rashi_rows(chart),
             "western_aspect_rows": western_aspect_rows(chart, chart_name),
+            "page_3": page_3,
         },
         template_path=PAGE_2_TEMPLATE,
     )
@@ -109,9 +122,8 @@ def build_report(chart_path: Path) -> tuple[Path, int] | None:
             "ayanamsa": escape(chart.get("metadata", {}).get("ayanamsa", "")),
             "d1_north_svg": d1_svg,
             "d9_north_svg": d9_svg,
-            "graha_rows": graha_rows(chart),
-            "aspect_rows": aspect_rows(chart),
-            "rashi_rows": rashi_rows(chart),
+            "d10_north_svg": d10_svg,
+            "d20_north_svg": d20_svg,
             "page_2": page_2,
         }
     )
@@ -127,7 +139,10 @@ def has_required_calculated_charts(chart: dict) -> bool:
     calculated_charts = chart.get("calculated_charts")
     if not isinstance(calculated_charts, dict):
         return False
-    return bool(calculated_charts.get("d1")) and bool(calculated_charts.get("d9"))
+    return all(
+        bool(calculated_charts.get(chart_key))
+        for chart_key in ("d1", "d9", "d10", "d20")
+    )
 
 
 def western_chart_for_report(rendered_dir: Path) -> str:
@@ -156,6 +171,7 @@ def render_template(values: dict[str, str], *, template_path: Path = TEMPLATE) -
 def graha_rows(chart: dict) -> str:
     primary = primary_positions(chart)
     d9 = chart.get("calculated_charts", {}).get("d9", {})
+    dignities = dignity_for_chart(chart)
     rows = []
     for graha in GRAHAS:
         position = primary.get(graha)
@@ -165,6 +181,7 @@ def graha_rows(chart: dict) -> str:
             "<tr>"
             f"<td>{escape(ABBREVIATIONS[graha])}</td>"
             f"<td>{escape(longitude_text(position))}</td>"
+            f"<td>{escape(dignities.get(graha, ''))}</td>"
             f"<td>{escape(position.get('nakshatra') or '')}</td>"
             f"<td>{escape(position.get('pada') or '')}</td>"
             f"<td>{escape(position.get('chara_karaka') or '')}</td>"
@@ -201,11 +218,15 @@ def western_aspect_rows(chart: dict, chart_name: str) -> str:
     stellium_chart = build_western_chart(chart, chart_name)
     rows = []
     for aspect in stellium_chart.aspects:
+        body1 = western_body_label(aspect.object1.name)
+        body2 = western_body_label(aspect.object2.name)
+        if is_node_axis_pair(body1, body2):
+            continue
         rows.append(
             "<tr>"
-            f"<td>{escape(western_body_label(aspect.object1.name))}</td>"
+            f"<td>{escape(body1)}</td>"
             f"<td>{escape(aspect.aspect_name)}</td>"
-            f"<td>{escape(western_body_label(aspect.object2.name))}</td>"
+            f"<td>{escape(body2)}</td>"
             f"<td>{escape(f'{aspect.orb:.2f}°')}</td>"
             "</tr>"
         )
@@ -243,14 +264,18 @@ def rashi_rows(chart: dict) -> str:
 
 def aspect_rows(chart: dict) -> str:
     primary = primary_positions(chart)
+    primary_absolute = {
+        body: position.get("absolute_degree")
+        for body, position in primary.items()
+    }
     sign_to_grahas: dict[str, list[str]] = {sign: [] for sign in SIGNS}
-    for graha in GRAHAS:
+    for graha in GRAHA_DRISHTI_BODIES:
         position = primary.get(graha)
         if position and position.get("sign") in sign_to_grahas:
             sign_to_grahas[position["sign"]].append(graha)
 
     rows = []
-    for graha in GRAHAS:
+    for graha in GRAHA_DRISHTI_BODIES:
         position = primary.get(graha)
         if not position:
             continue
@@ -264,6 +289,7 @@ def aspect_rows(chart: dict) -> str:
         aspect_parts = []
         special_parts = []
         targets = []
+        orbs = []
         for count, label in aspect_specs:
             target_sign = sign_from(source_sign, count)
             aspect_parts.append(f"{label}: {sign_display(target_sign)}")
@@ -272,6 +298,13 @@ def aspect_rows(chart: dict) -> str:
             for target in sign_to_grahas[target_sign]:
                 if target != graha:
                     targets.append(f"{ABBREVIATIONS[target]} ({sign_display(target_sign)})")
+                    orb = graha_drishti_orb(
+                        primary_absolute.get(graha),
+                        primary_absolute.get(target),
+                        count,
+                    )
+                    if orb is not None:
+                        orbs.append(f"{ABBREVIATIONS[target]} {orb:.2f}°")
 
         rows.append(
             "<tr>"
@@ -279,9 +312,18 @@ def aspect_rows(chart: dict) -> str:
             f"<td>{escape('; '.join(aspect_parts))}</td>"
             f"<td>{escape(', '.join(special_parts) or 'None')}</td>"
             f"<td>{escape(', '.join(targets) or 'None')}</td>"
+            f"<td>{escape(', '.join(orbs) or '—')}</td>"
             "</tr>"
         )
     return "\n".join(rows)
+
+
+def graha_drishti_orb(source_degree, target_degree, house_count: int) -> float | None:
+    if source_degree is None or target_degree is None:
+        return None
+    exact_separation = (house_count - 1) * 30
+    actual_separation = (float(target_degree) - float(source_degree)) % 360
+    return abs(((actual_separation - exact_separation + 180) % 360) - 180)
 
 
 def primary_positions(chart: dict) -> dict[str, dict]:

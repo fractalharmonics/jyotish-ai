@@ -46,6 +46,14 @@ not been verified against JHora display conventions. Do not re-enable
 divisional degrees or introduce correction factors until the methodology is
 validated.
 
+## D10 Method
+
+D10 is derived from source-aligned D1 longitudes with PyJHora
+`jhora.horoscope.chart.charts.divisional_positions_from_rasi_positions()` using
+`divisional_chart_factor=10` and `chart_method=1`. The installed PyJHora source
+documents `dasamsa_chart(..., chart_method=1)` as Traditional Parasara, while
+`chart_method=4` is Parivritti Cyclic.
+
 ## Report Aspect Rules
 
 Graha drishti uses sign-based Vedic planetary aspects:

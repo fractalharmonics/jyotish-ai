@@ -2,7 +2,12 @@ import json
 import traceback
 from pathlib import Path
 
-from renderers.north_indian import render_d1_north_indian, render_d9_north_indian
+from renderers.north_indian import (
+    render_d1_north_indian,
+    render_d9_north_indian,
+    render_d10_north_indian,
+    render_d20_north_indian,
+)
 from renderers.western import create_western_png, render_d1_western
 
 
@@ -17,7 +22,7 @@ def render_chart_file(chart_path):
     chart_name = chart_path.stem
     if not has_required_calculated_charts(chart):
         print(
-            f"Skipping {chart_name}: missing calculated_charts.d1/d9; "
+            f"Skipping {chart_name}: missing calculated_charts.d1/d9/d10/d20; "
             "enrichment incomplete"
         )
         return []
@@ -51,6 +56,26 @@ def render_chart_file(chart_path):
         print(f"ERROR rendering {chart_path} North Indian D9: {error}")
         traceback.print_exc()
 
+    d10_north_path = chart_output_dir / "d10_north_indian.svg"
+    try:
+        d10_north_svg = render_d10_north_indian(chart, chart_name)
+        d10_north_path.write_text(d10_north_svg, encoding="utf-8")
+        outputs.append(d10_north_path)
+        print(f"Rendered {d10_north_path}")
+    except Exception as error:
+        print(f"ERROR rendering {chart_path} North Indian D10: {error}")
+        traceback.print_exc()
+
+    d20_north_path = chart_output_dir / "d20_north_indian.svg"
+    try:
+        d20_north_svg = render_d20_north_indian(chart, chart_name)
+        d20_north_path.write_text(d20_north_svg, encoding="utf-8")
+        outputs.append(d20_north_path)
+        print(f"Rendered {d20_north_path}")
+    except Exception as error:
+        print(f"ERROR rendering {chart_path} North Indian D20: {error}")
+        traceback.print_exc()
+
     western_path = chart_output_dir / "d1_western.svg"
     western_png_path = chart_output_dir / "d1_western.png"
     try:
@@ -71,7 +96,10 @@ def has_required_calculated_charts(chart):
     calculated_charts = chart.get("calculated_charts")
     if not isinstance(calculated_charts, dict):
         return False
-    return bool(calculated_charts.get("d1")) and bool(calculated_charts.get("d9"))
+    return all(
+        bool(calculated_charts.get(chart_key))
+        for chart_key in ("d1", "d9", "d10", "d20")
+    )
 
 
 def main():
