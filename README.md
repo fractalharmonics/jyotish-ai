@@ -19,23 +19,50 @@ an optional PyJHora enrichment layer.
 Put JHora TXT exports in `charts_in/`, then run:
 
 ```bash
-python3 process_charts.py
+./build.sh
 ```
 
-To regenerate outputs even when JSON already exists:
+This runs the full local pipeline:
+
+1. Parse JHora TXT exports.
+2. Enrich chart JSON.
+3. Validate outputs.
+4. Render SVG/PNG charts.
+5. Build PDF reports.
+
+`build.sh` always uses `.venv/bin/python` so the build does not accidentally run
+with system Python.
+
+Input chart files, generated chart JSON, rendered charts, and reports are
+ignored by Git. The `charts_in/` and `charts_out/` directories are kept in the
+repository with `.gitkeep` files.
+
+## Setup
+
+Create the project virtual environment and install dependencies into it:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install pyswisseph numpy geocoder pytz timezonefinder geopy python-dateutil weasyprint stellium playwright
+python -m playwright install chromium
+```
+
+## Manual/Debug Commands
+
+The wrapper is preferred for normal use. For debugging individual stages:
+
+```bash
+source .venv/bin/activate
 python3 process_charts.py --force
+python3 validate_output.py
+python3 render_charts.py
+python3 report/build_report.py
 ```
 
-To build the full local chart package in one command:
-
-```bash
-python3 build_chart_package.py
-```
-
-Input and output chart files are ignored by Git. The `charts_in/` and
-`charts_out/` directories are kept in the repository with `.gitkeep` files.
+Avoid using bare `python3 build_chart_package.py` as the primary command. It may
+use system Python and fail when dependencies are installed only in `.venv`.
 
 ## Example Input
 
@@ -96,12 +123,12 @@ The JSON preserves raw parser output and keeps enrichment separate:
 
 The parser uses only the Python standard library.
 
-Motion enrichment uses PyJHora when available. The current local environment
-needed these runtime packages:
+The full build uses PyJHora-related runtime dependencies, Stellium rendering,
+WeasyPrint PDF generation, and Playwright/Chromium rasterization. Install them
+into `.venv` with the setup commands above.
 
-```bash
-python -m pip install pyswisseph numpy geocoder pytz timezonefinder geopy python-dateutil
-```
+`build.sh` requires `.venv/bin/python`. If it is missing, create the virtual
+environment and install dependencies before building.
 
 If PyJHora import or motion enrichment fails, processing should still complete
 and the failure is recorded in `enrichment.notes`.
